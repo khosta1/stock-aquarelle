@@ -1,8 +1,4 @@
+# Python packages for Watercolor Stock.
+# Install with:  pip install -r requirements.txt
 Flask>=3.0
-waitress>=3.0   ; production WSGI server (see serve.py)
-
-
-launch dev = venv\Scripts\python.exe app.py
-http://localhost:5000/
-launch serv = venv\Scripts\python.exe serve.py
-http://localhost:8000/
+waitress>=3.0
