@@ -71,3 +71,52 @@ To host it on the internet (e.g. a VPS or a Python host like Render / PythonAnyw
 
 Note: Hostinger's cheap *shared* hosting is for PHP/MySQL and won't run Flask;
 you'd need their VPS plan or a Python-friendly host.
+
+## Deploying to PythonAnywhere (recommended free host)
+
+PythonAnywhere keeps a persistent disk on the free tier, so the SQLite
+`store.db` survives restarts (unlike Render/Railway free tiers). HTTPS is
+included. Repo: <https://github.com/khosta1/stock-aquarelle>
+
+1. **Create a free account** at <https://www.pythonanywhere.com> ("Beginner").
+2. **Open a Bash console** (Consoles → Bash) and pull the code:
+   ```bash
+   git clone https://github.com/khosta1/stock-aquarelle.git
+   cd stock-aquarelle
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+3. **Web tab** → *Add a new web app* → *Manual configuration* → pick the same
+   Python 3 version as the venv.
+4. Set, in the Web tab:
+   - **Source code:** `/home/khosta1/stock-aquarelle`
+   - **Virtualenv:** `/home/khosta1/stock-aquarelle/venv`
+   - **Static files mapping:** URL `/static/` →
+     `/home/khosta1/stock-aquarelle/static`
+5. **Edit the WSGI file** (link in the Web tab) — replace its contents with:
+   ```python
+   import os
+   import sys
+
+   path = "/home/khosta1/stock-aquarelle"
+   if path not in sys.path:
+       sys.path.insert(0, path)
+
+   # Secrets live HERE (this file is private, not in the git repo):
+   os.environ["WATERCOLOR_SECRET"] = "<a-long-random-string>"
+   os.environ["WATERCOLOR_PASSWORD"] = "<your-login-password>"
+   os.environ["WATERCOLOR_HTTPS"] = "1"
+
+   from app import app as application  # noqa: E402
+   ```
+6. Click **Reload** → visit `https://khosta1.pythonanywhere.com`.
+
+### Updating the live site later
+
+```bash
+# in the PythonAnywhere Bash console:
+cd stock-aquarelle && git pull
+```
+then click **Reload** in the Web tab. Your `store.db` is untouched by `git pull`
+(it's git-ignored), so live data is safe across updates.
