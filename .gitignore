@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+.venv/
+
+# The database is local data, not code — back it up by copying the file.
+store.db
+
+# Uploaded artwork images (keep the folder, ignore its contents)
+static/images/*
+!static/images/.gitkeep

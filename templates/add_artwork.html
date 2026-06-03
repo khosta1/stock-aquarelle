@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Ajouter une œuvre — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head"><h1>Ajouter une œuvre</h1></div>
+
+  <form method="post" class="form card">
+    <label>
+      Titre *
+      <input type="text" name="title" value="{{ form.title or '' }}" required autofocus>
+    </label>
+    <label>
+      Année
+      <input type="number" name="year" value="{{ form.year or '' }}"
+             min="1900" max="2100" placeholder="ex. 2026">
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn">Enregistrer l'œuvre</button>
+      <a class="btn btn-ghost" href="{{ url_for('index') }}">Annuler</a>
+    </div>
+  </form>
+
+  <p class="muted">Ensuite, vous ajouterez des formats/éditions (ex. A3, édition de 50).</p>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Tableau de bord</h1>
+    <a class="btn" href="{{ url_for('add_artwork') }}">+ Ajouter une œuvre</a>
+  </div>
+
+  {% if not groups %}
+    <p class="muted">Aucune œuvre pour l'instant. Commencez par en ajouter une.</p>
+  {% endif %}
+
+  {% for group in groups %}
+    <section class="card">
+      <div class="card-head">
+        <h2>
+          <a href="{{ url_for('artwork_detail', artwork_id=group.artwork.id) }}">
+            {{ group.artwork.title }}
+          </a>
+          {% if group.artwork.year %}<span class="muted">({{ group.artwork.year }})</span>{% endif %}
+        </h2>
+        <a class="btn btn-small"
+           href="{{ url_for('add_variant', artwork_id=group.artwork.id) }}">+ Format</a>
+      </div>
+
+      {% if group.variants %}
+        <table class="stock">
+          <thead>
+            <tr>
+              <th>Format</th><th>Papier</th><th>Prix</th>
+              <th>Imprimés</th><th>Vendus</th><th>En stock</th>
+              <th>Édition restante</th><th>Recettes</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in group.variants %}
+              <tr class="{{ 'low' if v.in_stock == 0 and not v.sold_out }}{{ 'soldout' if v.sold_out }}">
+                <td>{{ v.size }}</td>
+                <td>{{ v.paper or '—' }}</td>
+                <td>{{ '%.2f'|format(v.price) }}</td>
+                <td>{{ v.printed }}</td>
+                <td>{{ v.sold }}</td>
+                <td><strong>{{ v.in_stock }}</strong></td>
+                <td>{{ v.remaining }} / {{ v.edition_size }}</td>
+                <td>{{ '%.2f'|format(v.revenue) }}</td>
+                <td><a href="{{ url_for('variant_detail', variant_id=v.id) }}">Gérer →</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">Aucun format/édition pour cette œuvre.</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Ajouter un format — {{ artwork.title }}{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Ajouter un format / une édition</h1>
+    <p class="muted">pour « {{ artwork.title }} »</p>
+  </div>
+
+  <form method="post" class="form card">
+    <label>
+      Format *
+      <input type="text" name="size" value="{{ form.size or '' }}"
+             placeholder="ex. A3, 30×40 cm" required autofocus>
+    </label>
+    <label>
+      Papier
+      <input type="text" name="paper" value="{{ form.paper or '' }}"
+             placeholder="ex. mat 300g (facultatif)">
+    </label>
+    <label>
+      Prix
+      <input type="number" name="price" value="{{ form.price or '' }}"
+             step="0.01" min="0" placeholder="ex. 45.00">
+    </label>
+    <label>
+      Taille de l'édition * <span class="muted">(nombre maximal d'exemplaires)</span>
+      <input type="number" name="edition_size" value="{{ form.edition_size or '' }}"
+             min="1" placeholder="ex. 50" required>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn">Enregistrer le format</button>
+      <a class="btn btn-ghost"
+         href="{{ url_for('artwork_detail', artwork_id=artwork.id) }}">Annuler</a>
+    </div>
+  </form>
+{% endblock %}

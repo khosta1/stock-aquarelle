@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ artwork.title }} — Stock Aquarelle{% endblock %}
+{% block content %}
+  <p><a href="{{ url_for('index') }}">← Tableau de bord</a></p>
+
+  <div class="page-head">
+    <h1>{{ artwork.title }}
+      {% if artwork.year %}<span class="muted">({{ artwork.year }})</span>{% endif %}
+    </h1>
+    <a class="btn" href="{{ url_for('add_variant', artwork_id=artwork.id) }}">+ Ajouter un format</a>
+  </div>
+
+  {% if not variants %}
+    <p class="muted">Aucun format/édition pour l'instant. Ajoutez-en un pour suivre le stock.</p>
+  {% endif %}
+
+  {% for v in variants %}
+    <section class="card">
+      <div class="card-head">
+        <h2>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}
+          <span class="muted">— édition de {{ v.edition_size }}</span>
+        </h2>
+        <a class="btn btn-small" href="{{ url_for('variant_detail', variant_id=v.id) }}">
+          Gérer les exemplaires →
+        </a>
+      </div>
+      <ul class="stats">
+        <li><span>Imprimés</span><strong>{{ v.printed }}</strong></li>
+        <li><span>Vendus</span><strong>{{ v.sold }}</strong></li>
+        <li><span>En stock</span><strong>{{ v.in_stock }}</strong></li>
+        <li><span>Édition restante</span><strong>{{ v.remaining }}</strong></li>
+        <li><span>Recettes</span><strong>{{ '%.2f'|format(v.revenue) }}</strong></li>
+      </ul>
+    </section>
+  {% endfor %}
+{% endblock %}

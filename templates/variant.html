@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ variant.size }} — {{ variant.artwork_title }}{% endblock %}
+{% block content %}
+  <p><a href="{{ url_for('artwork_detail', artwork_id=variant.artwork_id) }}">
+    ← {{ variant.artwork_title }}</a></p>
+
+  <div class="page-head">
+    <h1>{{ variant.artwork_title }} — {{ variant.size }}</h1>
+    <p class="muted">
+      {% if variant.paper %}{{ variant.paper }} · {% endif %}
+      Prix {{ '%.2f'|format(variant.price) }} · édition de {{ variant.edition_size }}
+    </p>
+  </div>
+
+  <ul class="stats">
+    <li><span>Imprimés</span><strong>{{ variant.printed }}</strong></li>
+    <li><span>Vendus</span><strong>{{ variant.sold }}</strong></li>
+    <li><span>En stock</span><strong>{{ variant.in_stock }}</strong></li>
+    <li><span>Édition restante</span><strong>{{ variant.remaining }}</strong></li>
+    <li><span>Recettes</span><strong>{{ '%.2f'|format(variant.revenue) }}</strong></li>
+  </ul>
+
+  <section class="card">
+    <h2>Enregistrer un tirage</h2>
+    {% if variant.remaining > 0 %}
+      <form method="post"
+            action="{{ url_for('print_copies', variant_id=variant.id) }}"
+            class="form-inline">
+        <label>Combien d'exemplaires ?
+          <input type="number" name="quantity" min="1" max="{{ variant.remaining }}"
+                 value="1" required>
+        </label>
+        <label>Date
+          <input type="date" name="printed_date" value="{{ today }}">
+        </label>
+        <button type="submit" class="btn">Ajouter au stock</button>
+        <span class="muted">{{ variant.remaining }} emplacement(s) d'édition restant(s)</span>
+      </form>
+    {% else %}
+      <p class="muted">Cette édition est entièrement imprimée ({{ variant.edition_size }}/{{ variant.edition_size }}).</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Exemplaires</h2>
+    {% if not copies %}
+      <p class="muted">Aucun exemplaire imprimé pour l'instant.</p>
+    {% else %}
+      <div class="copies-grid">
+        {% for c in copies %}
+          <div class="copy copy-{{ c.status }}">
+            <div class="copy-no">n°{{ c.edition_number }}/{{ variant.edition_size }}</div>
+            {% if c.status == 'sold' %}
+              <div class="copy-tag">VENDU</div>
+              <div class="copy-meta">
+                {{ '%.2f'|format(c.sale_price) if c.sale_price is not none else '' }}<br>
+                {{ c.customer or '' }}{% if c.channel %} · {{ c.channel }}{% endif %}<br>
+                <span class="muted">{{ c.sold_date | fr_date }}</span>
+              </div>
+              <form method="post"
+                    action="{{ url_for('unsell_copy', copy_id=c.id) }}"
+                    onsubmit="return confirm('Annuler la vente et remettre cet exemplaire en stock ?');">
+                <button type="submit" class="btn btn-small btn-ghost">Annuler la vente</button>
+              </form>
+            {% else %}
+              <div class="copy-tag">en stock</div>
+              <a class="btn btn-small"
+                 href="{{ url_for('sell_copy', copy_id=c.id) }}">Vendre</a>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

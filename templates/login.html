@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Connexion — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="login-wrap">
+    <div class="card">
+      <h1>Connexion</h1>
+      <p class="muted">Entrez le mot de passe pour accéder à votre stock.</p>
+      <form method="post" class="form">
+        <label>
+          Mot de passe
+          <input type="password" name="password" required autofocus>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn">Se connecter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
