@@ -46,8 +46,33 @@ automatically on first run.
 
 ## Backups
 
-Your data lives in a single file: **`store.db`**. To back up, just copy it
-somewhere safe. To restore, copy it back.
+Your data lives in two places, both git-ignored (they are local data, not code):
+
+- **`store.db`** — the database (artworks, editions, copies, sales).
+- **`static/images/`** — uploaded artwork photos.
+
+### One-click full backup (recommended)
+
+On the **Rapport** page, click **"Télécharger la sauvegarde (.zip)"**. This
+downloads `sauvegarde-stock-aquarelle-YYYY-MM-DD.zip` containing `store.db` and
+all photos — a complete, restorable snapshot. Do this regularly and keep the
+file somewhere safe (your PC, a USB key, cloud drive). The sales report also has
+CSV exports (sales / full stock) for accounting, but those are *not* a full
+restorable backup — the `.zip` is.
+
+### Restoring from a backup
+
+Unzip the backup, then:
+
+- **On the live server (PythonAnywhere):** in the *Files* tab, upload `store.db`
+  into `/home/khosta1/stock-aquarelle/` (overwrite the existing one) and upload
+  the photos into `/home/khosta1/stock-aquarelle/static/images/`. Then click
+  **Reload** in the Web tab.
+- **Locally:** put `store.db` back in the project folder and the photos back in
+  `static/images/`.
+
+Because both files are git-ignored, `git pull`/redeploys never touch them — your
+data is safe across code updates.
 
 ## Hosting it online later
 

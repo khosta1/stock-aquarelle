@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Paramètres — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Paramètres globaux</h1>
+  </div>
+  <p class="muted">
+    Ces listes alimentent les menus déroulants : Format &amp; Papier à la création
+    d'une édition, et Catégorie lors d'une dépense. Supprimer un élément ne touche
+    pas les enregistrements existants — il disparaît simplement des futurs menus.
+  </p>
+
+  {# ---------- Formats ---------- #}
+  <section class="card">
+    <h2>Formats</h2>
+    {% if formats %}
+      <table class="stock">
+        <thead><tr><th>Nom</th><th>Dimensions</th><th></th></tr></thead>
+        <tbody>
+          {% for f in formats %}
+            <tr>
+              <td>{{ f.name }}</td>
+              <td>{{ f.dimensions or '—' }}</td>
+              <td>
+                <form method="post"
+                      action="{{ url_for('delete_format', format_id=f.id) }}"
+                      onsubmit="return confirm('Supprimer le format « {{ f.name }} » ?');">
+                  <button type="submit" class="btn btn-small btn-ghost">Supprimer</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Aucun format pour l'instant.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('add_format') }}" class="form-inline">
+      <label>Nom <input type="text" name="name" placeholder="ex. A3" required></label>
+      <label>Dimensions <input type="text" name="dimensions" placeholder="ex. 29,7 × 42 cm"></label>
+      <button type="submit" class="btn">Ajouter le format</button>
+    </form>
+  </section>
+
+  {# ---------- Papiers ---------- #}
+  <section class="card">
+    <h2>Papiers</h2>
+    {% if papers %}
+      <table class="stock">
+        <thead><tr><th>Nom</th><th></th></tr></thead>
+        <tbody>
+          {% for p in papers %}
+            <tr>
+              <td>{{ p.name }}</td>
+              <td>
+                <form method="post"
+                      action="{{ url_for('delete_paper', paper_id=p.id) }}"
+                      onsubmit="return confirm('Supprimer le papier « {{ p.name }} » ?');">
+                  <button type="submit" class="btn btn-small btn-ghost">Supprimer</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Aucun papier pour l'instant.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('add_paper') }}" class="form-inline">
+      <label>Nom <input type="text" name="name" placeholder="ex. Mat 300g" required></label>
+      <button type="submit" class="btn">Ajouter le papier</button>
+    </form>
+  </section>
+
+  {# ---------- Catégories de dépenses ---------- #}
+  <section class="card">
+    <h2>Catégories de dépenses</h2>
+    {% if categories %}
+      <table class="stock">
+        <thead><tr><th>Nom</th><th></th></tr></thead>
+        <tbody>
+          {% for cat in categories %}
+            <tr>
+              <td>{{ cat.name }}</td>
+              <td>
+                <form method="post"
+                      action="{{ url_for('delete_category', category_id=cat.id) }}"
+                      onsubmit="return confirm('Supprimer la catégorie « {{ cat.name }} » ?');">
+                  <button type="submit" class="btn btn-small btn-ghost">Supprimer</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Aucune catégorie pour l'instant.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('add_category') }}" class="form-inline">
+      <label>Nom <input type="text" name="name" placeholder="ex. Cadre" required></label>
+      <button type="submit" class="btn">Ajouter la catégorie</button>
+    </form>
+  </section>
+{% endblock %}

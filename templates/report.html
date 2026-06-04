@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Rapport de ventes — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Rapport</h1>
+    <div class="form-actions">
+      <a class="btn" href="{{ url_for('export_sales_csv') }}">📄 Export ventes (CSV)</a>
+      <a class="btn btn-ghost" href="{{ url_for('export_stock_csv') }}">Export stock complet</a>
+    </div>
+  </div>
+
+  <ul class="stats">
+    <li><span>Exemplaires vendus</span><strong>{{ totals.sold }}</strong></li>
+    <li><span>Recettes totales</span><strong>{{ '%.2f'|format(totals.revenue) }}</strong></li>
+    <li><span>Bénéfice net</span>
+      <strong class="{{ 'amount-pos' if net >= 0 else 'amount-neg' }}">
+        {{ '%.2f'|format(net) }}
+      </strong>
+    </li>
+  </ul>
+
+  <section class="card">
+    <h2>Bilan financier</h2>
+    <table class="finance-table">
+      <tbody>
+        <tr>
+          <td>Recettes (ventes)</td>
+          <td class="amount amount-pos">+ {{ '%.2f'|format(totals.revenue) }}</td>
+        </tr>
+        <tr>
+          <td>Coûts d'impression</td>
+          <td class="amount amount-neg">− {{ '%.2f'|format(print_costs) }}</td>
+        </tr>
+        <tr>
+          <td>Autres dépenses</td>
+          <td class="amount amount-neg">− {{ '%.2f'|format(expenses_total) }}</td>
+        </tr>
+        <tr class="finance-total">
+          <td>Bénéfice net</td>
+          <td class="amount {{ 'amount-pos' if net >= 0 else 'amount-neg' }}">
+            = {{ '%.2f'|format(net) }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Recettes par canal</h2>
+    {% if not by_channel %}
+      <p class="muted">Aucune vente pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead><tr><th>Canal</th><th>Vendus</th><th>Recettes</th></tr></thead>
+        <tbody>
+          {% for r in by_channel %}
+            <tr>
+              <td>{{ r.channel }}</td>
+              <td>{{ r.sold }}</td>
+              <td>{{ '%.2f'|format(r.revenue) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Recettes par mois</h2>
+    {% if not by_month %}
+      <p class="muted">Aucune vente datée pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead><tr><th>Mois</th><th>Vendus</th><th>Recettes</th></tr></thead>
+        <tbody>
+          {% for r in by_month %}
+            <tr>
+              <td>{{ r.month | fr_month }}</td>
+              <td>{{ r.sold }}</td>
+              <td>{{ '%.2f'|format(r.revenue) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Dépenses par catégorie</h2>
+    {% if not expenses_by_category %}
+      <p class="muted">Aucune dépense pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead><tr><th>Catégorie</th><th>Nombre</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for e in expenses_by_category %}
+            <tr>
+              <td>{{ e.category }}</td>
+              <td>{{ e.count }}</td>
+              <td>{{ '%.2f'|format(e.total) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>💾 Sauvegarde complète</h2>
+    <p class="muted">
+      Télécharge un fichier <code>.zip</code> contenant la base de données
+      (<code>store.db</code>) et toutes les photos. C'est votre sauvegarde de
+      secours : en cas de problème serveur, elle permet de tout restaurer à
+      l'identique. À faire régulièrement et à garder en lieu sûr.
+    </p>
+    <a class="btn" href="{{ url_for('export_backup') }}">
+      Télécharger la sauvegarde (.zip)
+    </a>
+  </section>
+{% endblock %}

@@ -3,7 +3,7 @@
 {% block content %}
   <div class="page-head"><h1>Ajouter une œuvre</h1></div>
 
-  <form method="post" class="form card">
+  <form method="post" class="form card" enctype="multipart/form-data">
     <label>
       Titre *
       <input type="text" name="title" value="{{ form.title or '' }}" required autofocus>
@@ -12,6 +12,10 @@
       Année
       <input type="number" name="year" value="{{ form.year or '' }}"
              min="1900" max="2100" placeholder="ex. 2026">
+    </label>
+    <label>
+      Photo <span class="muted">(facultatif — jpg, png, gif, webp)</span>
+      <input type="file" name="photo" accept="image/*">
     </label>
     <div class="form-actions">
       <button type="submit" class="btn">Enregistrer l'œuvre</button>

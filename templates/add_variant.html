@@ -9,13 +9,33 @@
   <form method="post" class="form card">
     <label>
       Format *
-      <input type="text" name="size" value="{{ form.size or '' }}"
-             placeholder="ex. A3, 30×40 cm" required autofocus>
+      {% if formats %}
+        <select name="size" required autofocus>
+          <option value="">— choisir un format —</option>
+          {% for f in formats %}
+            <option value="{{ f.name }}" {{ 'selected' if form.size == f.name }}>
+              {{ f.name }}{% if f.dimensions %} — {{ f.dimensions }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <span class="muted">Aucun format défini —
+          <a href="{{ url_for('settings') }}">créez-en un dans Paramètres</a>.</span>
+      {% endif %}
     </label>
     <label>
       Papier
-      <input type="text" name="paper" value="{{ form.paper or '' }}"
-             placeholder="ex. mat 300g (facultatif)">
+      {% if papers %}
+        <select name="paper">
+          <option value="">— aucun —</option>
+          {% for p in papers %}
+            <option value="{{ p.name }}" {{ 'selected' if form.paper == p.name }}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <span class="muted">Aucun papier défini —
+          <a href="{{ url_for('settings') }}">ajoutez-en dans Paramètres</a>.</span>
+      {% endif %}
     </label>
     <label>
       Prix

@@ -4,18 +4,31 @@ Run locally with:  python app.py   (or: venv\\Scripts\\python.exe app.py)
 Then open:          http://localhost:5000
 """
 
+import csv
 import hmac
+import io
 import os
+import uuid
+import zipfile
 from datetime import date, datetime, timedelta
 
-from flask import (Flask, flash, redirect, render_template, request, session,
-                   url_for)
+from flask import (Flask, Response, flash, redirect, render_template, request,
+                   session, url_for)
 
 import database
 
 app = Flask(__name__)
 # Secret key signs sessions/flash messages. Override in production via env var.
 app.config["SECRET_KEY"] = os.environ.get("WATERCOLOR_SECRET", "dev-secret-change-me")
+
+# --- Image upload config ---------------------------------------------------
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB max per upload
+IMAGES_DIR = os.path.join(app.static_folder, "images")
+
+FRENCH_MONTHS = ["", "janvier", "février", "mars", "avril", "mai", "juin",
+                 "juillet", "août", "septembre", "octobre", "novembre",
+                 "décembre"]
 
 # --- Authentication config -------------------------------------------------
 # Single shared password. Set WATERCOLOR_PASSWORD on the server; the local
@@ -24,6 +37,12 @@ APP_PASSWORD = os.environ.get("WATERCOLOR_PASSWORD") or "aquarelle"
 if not os.environ.get("WATERCOLOR_PASSWORD"):
     print("WARNING: using default password 'aquarelle'. "
           "Set WATERCOLOR_PASSWORD before hosting online.")
+
+# Local dev convenience: set WATERCOLOR_NO_LOGIN=1 to skip the login entirely
+# for fast iteration. NEVER set this on the server (it is unset there by default).
+LOGIN_DISABLED = os.environ.get("WATERCOLOR_NO_LOGIN") == "1"
+if LOGIN_DISABLED:
+    print("WARNING: login is DISABLED (WATERCOLOR_NO_LOGIN=1) — local dev only!")
 
 # Stay logged in for 30 days, then require the password again.
 app.permanent_session_lifetime = timedelta(days=30)
@@ -42,10 +61,18 @@ database.init_db()
 @app.before_request
 def require_login():
     """Block every page behind the password, except the login page and CSS."""
+    if LOGIN_DISABLED:               # local dev fast-iteration mode
+        return
     if request.endpoint in ("login", "static"):
         return
     if not session.get("logged_in"):
         return redirect(url_for("login"))
+
+
+@app.context_processor
+def inject_auth_flags():
+    """Make login state available to templates (so the nav shows in dev mode)."""
+    return {"login_disabled": LOGIN_DISABLED}
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -85,6 +112,39 @@ def fr_date(value):
         return value
 
 
+@app.template_filter("fr_month")
+def fr_month(value):
+    """Display a 'YYYY-MM' month key in French, e.g. 'juin 2026'."""
+    if not value or len(value) < 7:
+        return value or ""
+    try:
+        return f"{FRENCH_MONTHS[int(value[5:7])]} {value[:4]}"
+    except (ValueError, IndexError):
+        return value
+
+
+def _allowed_image(filename):
+    return ("." in filename
+            and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS)
+
+
+def save_uploaded_image(file):
+    """Save an uploaded image under static/images with a random name.
+
+    Returns (filename, error_message). filename is None if no file was sent;
+    error_message is set only when a file was sent but rejected.
+    """
+    if not file or not file.filename:
+        return None, None
+    if not _allowed_image(file.filename):
+        return None, "Format d'image non supporté (jpg, png, gif, webp)."
+    ext = file.filename.rsplit(".", 1)[1].lower()
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+    file.save(os.path.join(IMAGES_DIR, fname))
+    return fname, None
+
+
 @app.route("/")
 def index():
     """Dashboard: every artwork with its variants and live stock numbers."""
@@ -104,9 +164,13 @@ def add_artwork():
         if not title:
             flash("Veuillez saisir un titre.", "error")
             return render_template("add_artwork.html", form=request.form)
+        image_path, img_error = save_uploaded_image(request.files.get("photo"))
+        if img_error:
+            flash(img_error, "error")  # keep the artwork, just without a photo
         artwork_id = database.add_artwork(
             title=title,
             year=int(year) if year.isdigit() else None,
+            image_path=image_path,
         )
         flash(f"Œuvre « {title} » ajoutée.", "success")
         return redirect(url_for("artwork_detail", artwork_id=artwork_id))
@@ -157,7 +221,8 @@ def add_variant(artwork_id):
             for e in errors:
                 flash(e, "error")
             return render_template(
-                "add_variant.html", artwork=artwork, form=request.form
+                "add_variant.html", artwork=artwork, form=request.form,
+                formats=database.list_formats(), papers=database.list_papers()
             )
 
         database.add_variant(
@@ -170,7 +235,10 @@ def add_variant(artwork_id):
         flash(f"Format {size} (édition de {edition_size}) ajouté.", "success")
         return redirect(url_for("artwork_detail", artwork_id=artwork_id))
 
-    return render_template("add_variant.html", artwork=artwork, form={})
+    return render_template(
+        "add_variant.html", artwork=artwork, form={},
+        formats=database.list_formats(), papers=database.list_papers()
+    )
 
 
 @app.route("/variants/<int:variant_id>")
@@ -258,6 +326,328 @@ def unsell_copy(copy_id):
         flash(f"Vente de l'exemplaire n°{copy['edition_number']} annulée — "
               f"remis en stock.", "success")
     return redirect(url_for("variant_detail", variant_id=copy["variant_id"]))
+
+
+# ---- Artwork photo --------------------------------------------------------
+
+@app.route("/artworks/<int:artwork_id>/photo", methods=["POST"])
+def update_artwork_photo(artwork_id):
+    artwork = database.get_artwork(artwork_id)
+    if artwork is None:
+        flash("Œuvre introuvable.", "error")
+        return redirect(url_for("index"))
+
+    image_path, error = save_uploaded_image(request.files.get("photo"))
+    if error:
+        flash(error, "error")
+    elif image_path:
+        old = artwork["image_path"]
+        database.update_artwork_image(artwork_id, image_path)
+        if old:  # remove the previous file so we don't leave orphans
+            try:
+                os.remove(os.path.join(IMAGES_DIR, old))
+            except OSError:
+                pass
+        flash("Photo mise à jour.", "success")
+    else:
+        flash("Aucune image sélectionnée.", "error")
+    return redirect(url_for("artwork_detail", artwork_id=artwork_id))
+
+
+# ---- Sales report ---------------------------------------------------------
+
+@app.route("/rapport")
+def report():
+    totals = database.sales_totals()
+    print_costs = database.print_costs_total()
+    expenses_total = database.expenses_total()
+    net = totals["revenue"] - print_costs - expenses_total
+    return render_template(
+        "report.html",
+        totals=totals,
+        by_channel=database.revenue_by_channel(),
+        by_month=database.revenue_by_month(),
+        print_costs=print_costs,
+        expenses_total=expenses_total,
+        expenses_by_category=database.expenses_by_category(),
+        net=net,
+    )
+
+
+# ---- CSV export -----------------------------------------------------------
+
+def _euro(value):
+    """French-style amount for CSV: 45.00 -> '45,00'."""
+    if value is None:
+        return ""
+    return f"{value:.2f}".replace(".", ",")
+
+
+def _csv_response(filename, header, rows):
+    """Build a download Response. Uses ';' + UTF-8 BOM for French Excel."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(header)
+    writer.writerows(rows)
+    data = "﻿" + buffer.getvalue()  # BOM so Excel shows accents correctly
+    return Response(
+        data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.route("/export/ventes.csv")
+def export_sales_csv():
+    rows = [
+        [r["artwork"], r["year"] or "", r["size"], r["paper"] or "",
+         r["edition_number"], r["edition_size"], _euro(r["sale_price"]),
+         fr_date(r["sold_date"]), r["customer"] or "", r["channel"] or ""]
+        for r in database.sold_copies_detailed()
+    ]
+    header = ["Œuvre", "Année", "Format", "Papier", "N° exemplaire",
+              "Taille édition", "Prix de vente", "Date de vente",
+              "Client", "Canal"]
+    return _csv_response("ventes.csv", header, rows)
+
+
+@app.route("/export/stock.csv")
+def export_stock_csv():
+    status_fr = {"printed": "en stock", "sold": "vendu"}
+    rows = [
+        [r["artwork"], r["year"] or "", r["size"], r["paper"] or "",
+         _euro(r["price"]), r["edition_number"], r["edition_size"],
+         status_fr.get(r["status"], r["status"]), fr_date(r["printed_date"]),
+         _euro(r["sale_price"]), fr_date(r["sold_date"]),
+         r["customer"] or "", r["channel"] or ""]
+        for r in database.all_copies_detailed()
+    ]
+    header = ["Œuvre", "Année", "Format", "Papier", "Prix", "N° exemplaire",
+              "Taille édition", "Statut", "Date impression", "Prix de vente",
+              "Date de vente", "Client", "Canal"]
+    return _csv_response("stock.csv", header, rows)
+
+
+@app.route("/export/sauvegarde.zip")
+def export_backup():
+    """Full restorable backup: the SQLite database + all uploaded photos."""
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zf:
+        if os.path.exists(database.DB_PATH):
+            zf.write(database.DB_PATH, arcname="store.db")
+        if os.path.isdir(IMAGES_DIR):
+            for name in sorted(os.listdir(IMAGES_DIR)):
+                full = os.path.join(IMAGES_DIR, name)
+                if os.path.isfile(full):
+                    zf.write(full, arcname=f"images/{name}")
+    mem.seek(0)
+    fname = f"sauvegarde-stock-aquarelle-{date.today().isoformat()}.zip"
+    return Response(
+        mem.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
+# ---- Global parameters (settings) ----------------------------------------
+
+@app.route("/parametres")
+def settings():
+    return render_template(
+        "settings.html",
+        papers=database.list_papers(),
+        formats=database.list_formats(),
+        categories=database.list_expense_categories(),
+    )
+
+
+@app.route("/parametres/papiers/ajouter", methods=["POST"])
+def add_paper():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Indiquez un nom de papier.", "error")
+    else:
+        error = database.add_paper(name)
+        flash(error or f"Papier « {name} » ajouté.",
+              "error" if error else "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/parametres/papiers/<int:paper_id>/supprimer", methods=["POST"])
+def delete_paper(paper_id):
+    database.delete_paper(paper_id)
+    flash("Papier supprimé.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/parametres/formats/ajouter", methods=["POST"])
+def add_format():
+    name = request.form.get("name", "").strip()
+    dimensions = request.form.get("dimensions", "").strip() or None
+    if not name:
+        flash("Indiquez un nom de format.", "error")
+    else:
+        error = database.add_format(name, dimensions)
+        flash(error or f"Format « {name} » ajouté.",
+              "error" if error else "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/parametres/formats/<int:format_id>/supprimer", methods=["POST"])
+def delete_format(format_id):
+    database.delete_format(format_id)
+    flash("Format supprimé.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/parametres/categories/ajouter", methods=["POST"])
+def add_category():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Indiquez un nom de catégorie.", "error")
+    else:
+        error = database.add_expense_category(name)
+        flash(error or f"Catégorie « {name} » ajoutée.",
+              "error" if error else "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/parametres/categories/<int:category_id>/supprimer",
+           methods=["POST"])
+def delete_category(category_id):
+    database.delete_expense_category(category_id)
+    flash("Catégorie supprimée.", "success")
+    return redirect(url_for("settings"))
+
+
+# ---- Printing (batch print runs + history) -------------------------------
+
+@app.route("/impression", methods=["GET", "POST"])
+def print_run_page():
+    if request.method == "POST":
+        run_date = request.form.get("date", "").strip() or date.today().isoformat()
+        note = request.form.get("note", "").strip() or None
+        cost_raw = request.form.get("cost", "").strip()
+        try:
+            cost = float(cost_raw) if cost_raw else 0.0
+        except ValueError:
+            flash("Le coût doit être un nombre.", "error")
+            return redirect(url_for("print_run_page"))
+
+        # Collect quantities from fields named qty_<variant_id>.
+        items = []
+        for key, value in request.form.items():
+            if key.startswith("qty_") and value.strip():
+                try:
+                    items.append((int(key[4:]), int(value)))
+                except ValueError:
+                    continue
+        items = [(vid, qty) for vid, qty in items if qty > 0]
+        if not items:
+            flash("Indiquez une quantité pour au moins une édition.", "error")
+            return redirect(url_for("print_run_page"))
+
+        run_id, printed, errors = database.create_print_run(
+            run_date, cost, note, items)
+        for e in errors:
+            flash(e, "error")
+        if run_id:
+            total = sum(p["quantity"] for p in printed)
+            flash(f"Tirage enregistré : {total} exemplaire(s) sur "
+                  f"{len(printed)} édition(s).", "success")
+            return redirect(url_for("print_history"))
+        return redirect(url_for("print_run_page"))
+
+    return render_template(
+        "print_run.html",
+        groups=database.list_artworks_with_variants(),
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/impressions")
+def print_history():
+    return render_template(
+        "print_history.html",
+        runs=database.list_print_runs(),
+        total_cost=database.print_costs_total(),
+    )
+
+
+# ---- Bulk selling --------------------------------------------------------
+
+@app.route("/vente-groupee", methods=["GET", "POST"])
+def sell_batch_page():
+    if request.method == "POST":
+        sold_date = request.form.get("date", "").strip() or date.today().isoformat()
+        channel = request.form.get("channel", "").strip() or None
+
+        items = []
+        for key, value in request.form.items():
+            if key.startswith("qty_") and value.strip():
+                try:
+                    items.append((int(key[4:]), int(value)))
+                except ValueError:
+                    continue
+        items = [(vid, qty) for vid, qty in items if qty > 0]
+        if not items:
+            flash("Indiquez une quantité pour au moins une édition.", "error")
+            return redirect(url_for("sell_batch_page"))
+
+        total, summary, errors = database.create_sale_batch(
+            sold_date, channel, items)
+        for e in errors:
+            flash(e, "error")
+        if total:
+            revenue = sum(s["count"] * s["price"] for s in summary)
+            flash(f"{total} vente(s) enregistrée(s) — recette {revenue:.2f}.",
+                  "success")
+            return redirect(url_for("report"))
+        return redirect(url_for("sell_batch_page"))
+
+    return render_template(
+        "sell_batch.html",
+        groups=database.list_artworks_with_variants(),
+        today=date.today().isoformat(),
+    )
+
+
+# ---- Expenses ------------------------------------------------------------
+
+@app.route("/depenses", methods=["GET", "POST"])
+def expenses_page():
+    if request.method == "POST":
+        exp_date = request.form.get("date", "").strip() or date.today().isoformat()
+        category = request.form.get("category", "").strip() or None
+        note = request.form.get("note", "").strip() or None
+        amount_raw = request.form.get("amount", "").strip()
+        try:
+            amount = float(amount_raw) if amount_raw else 0.0
+        except ValueError:
+            flash("Le montant doit être un nombre.", "error")
+            return redirect(url_for("expenses_page"))
+        if amount <= 0:
+            flash("Indiquez un montant supérieur à 0.", "error")
+            return redirect(url_for("expenses_page"))
+
+        database.add_expense(exp_date, category, amount, note)
+        flash("Dépense enregistrée.", "success")
+        return redirect(url_for("expenses_page"))
+
+    return render_template(
+        "expenses.html",
+        expenses=database.list_expenses(),
+        categories=database.list_expense_categories(),
+        total=database.expenses_total(),
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/depenses/<int:expense_id>/supprimer", methods=["POST"])
+def delete_expense(expense_id):
+    database.delete_expense(expense_id)
+    flash("Dépense supprimée.", "success")
+    return redirect(url_for("expenses_page"))
 
 
 if __name__ == "__main__":

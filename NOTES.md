@@ -15,6 +15,16 @@ Serveur de production en local — Waitress (port 8000) :
 Mot de passe de connexion par défaut en local : **aquarelle**
 (remplacé en ligne par la variable WATERCOLOR_PASSWORD)
 
+### Mode dev rapide (SANS login)
+
+Pour itérer vite sans avoir à se reconnecter :
+
+    .\run-dev.ps1
+
+Ça lance le serveur (port 5000) avec le login désactivé. Uniquement pour
+le PC local — le serveur en ligne garde toujours le login (il ne définit
+pas WATERCOLOR_NO_LOGIN).
+
 ## Mettre à jour le code (après avoir modifié quelque chose)
 
     git -C 'G:\Drawing\aquarelle\WIP_app\Watercolor_app' add .

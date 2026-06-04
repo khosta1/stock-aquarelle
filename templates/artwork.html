@@ -10,6 +10,24 @@
     <a class="btn" href="{{ url_for('add_variant', artwork_id=artwork.id) }}">+ Ajouter un format</a>
   </div>
 
+  <section class="card artwork-photo">
+    {% if artwork.image_path %}
+      <img class="artwork-img"
+           src="{{ url_for('static', filename='images/' + artwork.image_path) }}"
+           alt="{{ artwork.title }}">
+    {% else %}
+      <p class="muted">Aucune photo pour cette œuvre.</p>
+    {% endif %}
+    <form method="post"
+          action="{{ url_for('update_artwork_photo', artwork_id=artwork.id) }}"
+          enctype="multipart/form-data" class="form-inline">
+      <label>{{ 'Changer la photo' if artwork.image_path else 'Ajouter une photo' }}
+        <input type="file" name="photo" accept="image/*" required>
+      </label>
+      <button type="submit" class="btn btn-small">Envoyer</button>
+    </form>
+  </section>
+
   {% if not variants %}
     <p class="muted">Aucun format/édition pour l'instant. Ajoutez-en un pour suivre le stock.</p>
   {% endif %}

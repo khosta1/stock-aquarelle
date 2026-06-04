@@ -3,7 +3,10 @@
 {% block content %}
   <div class="page-head">
     <h1>Tableau de bord</h1>
-    <a class="btn" href="{{ url_for('add_artwork') }}">+ Ajouter une œuvre</a>
+    <div class="form-actions">
+      <a class="btn btn-ghost" href="{{ url_for('settings') }}">⚙ Paramètres globaux</a>
+      <a class="btn" href="{{ url_for('add_artwork') }}">+ Ajouter une œuvre</a>
+    </div>
   </div>
 
   {% if not groups %}
@@ -13,7 +16,14 @@
   {% for group in groups %}
     <section class="card">
       <div class="card-head">
-        <h2>
+        <h2 class="artwork-title">
+          {% if group.artwork.image_path %}
+            <a href="{{ url_for('artwork_detail', artwork_id=group.artwork.id) }}">
+              <img class="thumb"
+                   src="{{ url_for('static', filename='images/' + group.artwork.image_path) }}"
+                   alt="">
+            </a>
+          {% endif %}
           <a href="{{ url_for('artwork_detail', artwork_id=group.artwork.id) }}">
             {{ group.artwork.title }}
           </a>

@@ -41,3 +41,66 @@ CREATE TABLE IF NOT EXISTS copies (
     -- no two copies of the same variant can share an edition number
     UNIQUE (variant_id, edition_number)
 );
+
+-- ==========================================================================
+-- Global parameters (Phase A): reusable lookup lists chosen from dropdowns.
+-- Editions/expenses store the chosen NAME as text, so deleting an item here
+-- never breaks existing records — it just removes it from future menus.
+-- ==========================================================================
+
+-- Paper types (e.g. "Mat 300g").
+CREATE TABLE IF NOT EXISTS papers (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- Formats / sizes (e.g. name "A3", dimensions "29,7 × 42 cm").
+CREATE TABLE IF NOT EXISTS formats (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    dimensions TEXT
+);
+
+-- Expense categories (e.g. "Cadre", "Essence", "TVA").
+CREATE TABLE IF NOT EXISTS expense_categories (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- ==========================================================================
+-- Printing (Phase B): a print session has a total cost and prints copies
+-- across one or more editions at once.
+-- ==========================================================================
+
+CREATE TABLE IF NOT EXISTS print_runs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    date       TEXT,
+    cost       REAL NOT NULL DEFAULT 0,
+    note       TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- What each session printed, per edition (variant), and which numbers.
+CREATE TABLE IF NOT EXISTS print_run_items (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    print_run_id  INTEGER NOT NULL,
+    variant_id    INTEGER NOT NULL,
+    quantity      INTEGER NOT NULL,
+    first_number  INTEGER,
+    last_number   INTEGER,
+    FOREIGN KEY (print_run_id) REFERENCES print_runs (id) ON DELETE CASCADE,
+    FOREIGN KEY (variant_id) REFERENCES variants (id) ON DELETE CASCADE
+);
+
+-- ==========================================================================
+-- Other expenses (Phase C): frames, fuel, exhibition fees, VAT, etc.
+-- The category name is stored as text (chosen from expense_categories).
+-- ==========================================================================
+CREATE TABLE IF NOT EXISTS expenses (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    date       TEXT,
+    category   TEXT,
+    amount     REAL NOT NULL DEFAULT 0,
+    note       TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

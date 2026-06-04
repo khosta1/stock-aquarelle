@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Impression — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Nouvelle impression</h1>
+    <a class="btn btn-ghost" href="{{ url_for('print_history') }}">Historique des impressions</a>
+  </div>
+  <p class="muted">
+    Indiquez la quantité imprimée pour chaque édition concernée, puis le coût
+    total payé en bas. Les exemplaires sont numérotés automatiquement à la suite.
+  </p>
+
+  {% set ns = namespace(has_any=false) %}
+  <form method="post">
+    {% for group in groups %}
+      {% if group.variants %}
+        {% set ns.has_any = true %}
+        <section class="card">
+          <h2>{{ group.artwork.title }}</h2>
+          <table class="stock">
+            <thead>
+              <tr><th>Format</th><th>Imprimés</th><th>Édition restante</th>
+                  <th>Quantité imprimée</th></tr>
+            </thead>
+            <tbody>
+              {% for v in group.variants %}
+                <tr class="{{ 'soldout' if v.remaining <= 0 }}">
+                  <td>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}</td>
+                  <td>{{ v.printed }} / {{ v.edition_size }}</td>
+                  <td>{{ v.remaining }}</td>
+                  <td>
+                    {% if v.remaining > 0 %}
+                      <input type="number" class="qty-input" name="qty_{{ v.id }}"
+                             min="0" max="{{ v.remaining }}" placeholder="0">
+                    {% else %}
+                      <span class="muted">complète</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% endif %}
+    {% endfor %}
+
+    {% if not ns.has_any %}
+      <p class="muted">Aucune édition à imprimer. Créez d'abord une œuvre et au
+        moins une édition.</p>
+    {% else %}
+      <section class="card">
+        <h2>Détails de la session</h2>
+        <div class="form-inline">
+          <label>Date
+            <input type="date" name="date" value="{{ today }}">
+          </label>
+          <label>Coût total payé
+            <input type="number" name="cost" step="0.01" min="0" placeholder="ex. 80.00">
+          </label>
+          <label>Note
+            <input type="text" name="note" placeholder="ex. imprimeur (facultatif)">
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top: 1rem;">
+          <button type="submit" class="btn">Enregistrer l'impression</button>
+        </div>
+      </section>
+    {% endif %}
+  </form>
+{% endblock %}

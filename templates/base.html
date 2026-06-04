@@ -9,11 +9,16 @@
 <body>
   <header class="site-header">
     <a class="brand" href="{{ url_for('index') }}">🎨 Stock Aquarelle</a>
-    {% if session.logged_in %}
+    {% if session.logged_in or login_disabled %}
       <nav>
         <a href="{{ url_for('index') }}">Tableau de bord</a>
+        <a href="{{ url_for('print_run_page') }}">Impression</a>
+        <a href="{{ url_for('sell_batch_page') }}">Vente groupée</a>
+        <a href="{{ url_for('expenses_page') }}">Dépenses</a>
+        <a href="{{ url_for('report') }}">Rapport</a>
+        <a href="{{ url_for('settings') }}">Paramètres</a>
         <a href="{{ url_for('add_artwork') }}">+ Œuvre</a>
-        <a href="{{ url_for('logout') }}">Déconnexion</a>
+        {% if not login_disabled %}<a href="{{ url_for('logout') }}">Déconnexion</a>{% endif %}
       </nav>
     {% endif %}
   </header>

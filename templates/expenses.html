@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Dépenses — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Dépenses</h1>
+    <a class="btn btn-ghost" href="{{ url_for('settings') }}">Gérer les catégories</a>
+  </div>
+
+  <ul class="stats">
+    <li><span>Dépenses enregistrées</span><strong>{{ expenses|length }}</strong></li>
+    <li><span>Total des dépenses</span><strong>{{ '%.2f'|format(total) }}</strong></li>
+  </ul>
+
+  <section class="card">
+    <h2>Nouvelle dépense</h2>
+    <form method="post" class="form-inline">
+      <label>Date
+        <input type="date" name="date" value="{{ today }}">
+      </label>
+      <label>Catégorie
+        {% if categories %}
+          <select name="category" required>
+            <option value="">— choisir —</option>
+            {% for cat in categories %}
+              <option value="{{ cat.name }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <span class="muted">Aucune catégorie —
+            <a href="{{ url_for('settings') }}">créez-en dans Paramètres</a>.</span>
+        {% endif %}
+      </label>
+      <label>Montant
+        <input type="number" name="amount" step="0.01" min="0" placeholder="ex. 25.00" required>
+      </label>
+      <label>Note
+        <input type="text" name="note" placeholder="ex. cadre 30×40 (facultatif)">
+      </label>
+      <button type="submit" class="btn">Enregistrer</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Historique</h2>
+    {% if not expenses %}
+      <p class="muted">Aucune dépense enregistrée pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead>
+          <tr><th>Date</th><th>Catégorie</th><th>Montant</th><th>Note</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for e in expenses %}
+            <tr>
+              <td>{{ e.date | fr_date }}</td>
+              <td>{{ e.category or '—' }}</td>
+              <td>{{ '%.2f'|format(e.amount) }}</td>
+              <td>{{ e.note or '' }}</td>
+              <td>
+                <form method="post"
+                      action="{{ url_for('delete_expense', expense_id=e.id) }}"
+                      onsubmit="return confirm('Supprimer cette dépense ?');">
+                  <button type="submit" class="btn btn-small btn-ghost">Supprimer</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+{% endblock %}

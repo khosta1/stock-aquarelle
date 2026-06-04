@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Vente groupée — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Vente groupée</h1>
+    <a class="btn btn-ghost" href="{{ url_for('report') }}">Voir le rapport</a>
+  </div>
+  <p class="muted">
+    Indiquez combien d'exemplaires de chaque édition vous avez vendus. Le prix de
+    vente est repris automatiquement du prix de l'édition. Les exemplaires en
+    stock aux plus petits numéros sont vendus en premier.
+  </p>
+
+  {% set ns = namespace(has_any=false) %}
+  <form method="post">
+    {% for group in groups %}
+      {% if group.variants %}
+        {% set ns.has_any = true %}
+        <section class="card">
+          <h2>{{ group.artwork.title }}</h2>
+          <table class="stock">
+            <thead>
+              <tr><th>Format</th><th>En stock</th><th>Prix</th>
+                  <th>Quantité vendue</th></tr>
+            </thead>
+            <tbody>
+              {% for v in group.variants %}
+                <tr class="{{ 'soldout' if v.in_stock <= 0 }}">
+                  <td>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}</td>
+                  <td>{{ v.in_stock }}</td>
+                  <td>{{ '%.2f'|format(v.price) }}</td>
+                  <td>
+                    {% if v.in_stock > 0 %}
+                      <input type="number" class="qty-input" name="qty_{{ v.id }}"
+                             min="0" max="{{ v.in_stock }}" placeholder="0">
+                    {% else %}
+                      <span class="muted">rien en stock</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% endif %}
+    {% endfor %}
+
+    {% if not ns.has_any %}
+      <p class="muted">Aucune édition à vendre. Créez et imprimez d'abord des
+        exemplaires.</p>
+    {% else %}
+      <section class="card">
+        <h2>Détails de la vente</h2>
+        <div class="form-inline">
+          <label>Date de vente
+            <input type="date" name="date" value="{{ today }}">
+          </label>
+          <label>Canal de vente
+            <input type="text" name="channel" placeholder="ex. Marché, Etsy (facultatif)">
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top: 1rem;">
+          <button type="submit" class="btn">Enregistrer les ventes</button>
+        </div>
+      </section>
+    {% endif %}
+  </form>
+{% endblock %}
