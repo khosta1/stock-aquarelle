@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Reçu — {{ variant.artwork_title }}{% endblock %}
+{% block content %}
+  <div class="page-head no-print">
+    <a href="{{ url_for('variant_detail', variant_id=copy.variant_id) }}">← Retour</a>
+    <button class="btn" onclick="window.print()">🖨️ Imprimer</button>
+  </div>
+
+  <div class="receipt card">
+    <h1>Reçu de vente</h1>
+    <p class="muted">Stock Aquarelle</p>
+    <table class="receipt-table">
+      <tr><td>Date</td><td>{{ copy.sold_date | fr_date }}</td></tr>
+      <tr><td>Œuvre</td><td>{{ variant.artwork_title }}</td></tr>
+      <tr><td>Format</td>
+        <td>{{ variant.size }}{% if variant.paper %} · {{ variant.paper }}{% endif %}</td></tr>
+      <tr><td>Exemplaire</td>
+        <td>n°{{ copy.edition_number }} / {{ variant.edition_size }}</td></tr>
+      {% if copy.customer %}<tr><td>Client</td><td>{{ copy.customer }}</td></tr>{% endif %}
+      {% if copy.channel %}<tr><td>Canal</td><td>{{ copy.channel }}</td></tr>{% endif %}
+      <tr class="receipt-total"><td>Prix</td>
+        <td>{{ '%.2f'|format(copy.sale_price) }}</td></tr>
+    </table>
+    <p class="muted">Merci de votre achat !</p>
+  </div>
+{% endblock %}

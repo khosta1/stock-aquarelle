@@ -28,6 +28,26 @@
     </form>
   </section>
 
+  <section class="card">
+    <h2>Modifier l'œuvre</h2>
+    <form method="post" action="{{ url_for('update_artwork', artwork_id=artwork.id) }}"
+          class="form-inline">
+      <label>Titre
+        <input type="text" name="title" value="{{ artwork.title }}" required>
+      </label>
+      <label>Année
+        <input type="number" name="year" value="{{ artwork.year or '' }}"
+               min="1900" max="2100">
+      </label>
+      <button type="submit" class="btn btn-small">Enregistrer</button>
+    </form>
+    <form method="post" action="{{ url_for('delete_artwork', artwork_id=artwork.id) }}"
+          onsubmit="return confirm('Supprimer définitivement « {{ artwork.title }} » ainsi que toutes ses éditions, exemplaires et ventes ? Cette action est irréversible.');"
+          style="margin-top: 0.75rem;">
+      <button type="submit" class="btn btn-small btn-ghost">Supprimer cette œuvre</button>
+    </form>
+  </section>
+
   {% if not variants %}
     <p class="muted">Aucun format/édition pour l'instant. Ajoutez-en un pour suivre le stock.</p>
   {% endif %}

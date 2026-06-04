@@ -57,6 +57,8 @@
                 {{ c.customer or '' }}{% if c.channel %} · {{ c.channel }}{% endif %}<br>
                 <span class="muted">{{ c.sold_date | fr_date }}</span>
               </div>
+              <a class="btn btn-small btn-ghost" target="_blank"
+                 href="{{ url_for('receipt', copy_id=c.id) }}">Reçu</a>
               <form method="post"
                     action="{{ url_for('unsell_copy', copy_id=c.id) }}"
                     onsubmit="return confirm('Annuler la vente et remettre cet exemplaire en stock ?');">
@@ -71,5 +73,52 @@
         {% endfor %}
       </div>
     {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Modifier l'édition</h2>
+    <form method="post" action="{{ url_for('update_variant', variant_id=variant.id) }}"
+          class="form-inline">
+      <label>Format
+        <select name="size" required>
+          {% set fnd = namespace(v=false) %}
+          {% for f in formats %}
+            <option value="{{ f.name }}" {{ 'selected' if f.name == variant.size }}>
+              {{ f.name }}{% if f.dimensions %} — {{ f.dimensions }}{% endif %}
+            </option>
+            {% if f.name == variant.size %}{% set fnd.v = true %}{% endif %}
+          {% endfor %}
+          {% if not fnd.v %}<option value="{{ variant.size }}" selected>{{ variant.size }}</option>{% endif %}
+        </select>
+      </label>
+      <label>Papier
+        <select name="paper">
+          <option value="">— aucun —</option>
+          {% set pf = namespace(v=false) %}
+          {% for p in papers %}
+            <option value="{{ p.name }}" {{ 'selected' if p.name == variant.paper }}>{{ p.name }}</option>
+            {% if p.name == variant.paper %}{% set pf.v = true %}{% endif %}
+          {% endfor %}
+          {% if variant.paper and not pf.v %}<option value="{{ variant.paper }}" selected>{{ variant.paper }}</option>{% endif %}
+        </select>
+      </label>
+      <label>Prix
+        <input type="number" name="price" step="0.01" min="0"
+               value="{{ '%.2f'|format(variant.price) }}">
+      </label>
+      <label>Taille d'édition
+        <input type="number" name="edition_size" min="1" value="{{ variant.edition_size }}">
+      </label>
+      <button type="submit" class="btn btn-small">Enregistrer</button>
+    </form>
+    <p class="muted" style="margin-top: 0.5rem;">
+      Le prix ne change pas les ventes déjà enregistrées. La taille d'édition ne
+      peut pas être inférieure au nombre déjà imprimé ({{ variant.printed }}).
+    </p>
+    <form method="post" action="{{ url_for('delete_variant', variant_id=variant.id) }}"
+          onsubmit="return confirm('Supprimer définitivement cette édition et tous ses exemplaires ? Cette action est irréversible.');"
+          style="margin-top: 0.75rem;">
+      <button type="submit" class="btn btn-small btn-ghost">Supprimer cette édition</button>
+    </form>
   </section>
 {% endblock %}

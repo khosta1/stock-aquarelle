@@ -10,6 +10,31 @@
     total payé en bas. Les exemplaires sont numérotés automatiquement à la suite.
   </p>
 
+  {% if low_stock %}
+    <section class="card" id="a-reimprimer">
+      <h2>⚠ À réimprimer</h2>
+      <p class="muted">
+        Éditions avec {{ low_threshold }} exemplaire(s) en stock ou moins, encore
+        imprimables.
+      </p>
+      <table class="stock">
+        <thead>
+          <tr><th>Œuvre</th><th>Format</th><th>En stock</th><th>Édition restante</th></tr>
+        </thead>
+        <tbody>
+          {% for v in low_stock %}
+            <tr class="{{ 'soldout' if v.in_stock == 0 }}">
+              <td>{{ v.artwork_title }}</td>
+              <td>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}</td>
+              <td><strong>{{ v.in_stock }}</strong></td>
+              <td>{{ v.remaining }} / {{ v.edition_size }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
   {% set ns = namespace(has_any=false) %}
   <form method="post">
     {% for group in groups %}

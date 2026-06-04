@@ -9,6 +9,20 @@
     </div>
   </div>
 
+  <form method="get" class="form-inline search-bar">
+    <label>Du <input type="date" name="start" value="{{ start }}"></label>
+    <label>Au <input type="date" name="end" value="{{ end }}"></label>
+    <button type="submit" class="btn btn-small">Filtrer</button>
+    <a class="btn btn-small btn-ghost"
+       href="{{ url_for('report', start=year_start, end=year_end) }}">Cette année</a>
+    {% if start or end %}
+      <a class="btn btn-small btn-ghost" href="{{ url_for('report') }}">Tout</a>
+    {% endif %}
+  </form>
+  {% if start or end %}
+    <p class="muted">Période : {{ start | fr_date or '…' }} → {{ end | fr_date or '…' }}</p>
+  {% endif %}
+
   <ul class="stats">
     <li><span>Exemplaires vendus</span><strong>{{ totals.sold }}</strong></li>
     <li><span>Recettes totales</span><strong>{{ '%.2f'|format(totals.revenue) }}</strong></li>
@@ -43,6 +57,56 @@
         </tr>
       </tbody>
     </table>
+  </section>
+
+  <section class="card">
+    <h2>Bénéfice par œuvre</h2>
+    <p class="muted">
+      Recettes de l'œuvre − sa part des coûts d'impression. Les dépenses
+      générales (cadres, essence, TVA…) ne sont pas réparties par œuvre.
+    </p>
+    {% if not profit_by_artwork %}
+      <p class="muted">Aucune œuvre pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead><tr><th>Œuvre</th><th>Vendus</th><th>Recettes</th>
+                   <th>Coût impression</th><th>Bénéfice</th></tr></thead>
+        <tbody>
+          {% for p in profit_by_artwork %}
+            <tr>
+              <td>{{ p.title }}</td>
+              <td>{{ p.sold }}</td>
+              <td>{{ '%.2f'|format(p.revenue) }}</td>
+              <td>{{ '%.2f'|format(p.print_cost) }}</td>
+              <td class="{{ 'amount-pos' if p.profit >= 0 else 'amount-neg' }}">
+                {{ '%.2f'|format(p.profit) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Meilleures ventes</h2>
+    {% if not best_sellers %}
+      <p class="muted">Aucune vente pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead><tr><th>Œuvre</th><th>Format</th><th>Vendus</th><th>Recettes</th></tr></thead>
+        <tbody>
+          {% for b in best_sellers %}
+            <tr>
+              <td>{{ b.artwork }}</td>
+              <td>{{ b.size }}</td>
+              <td>{{ b.sold }}</td>
+              <td>{{ '%.2f'|format(b.revenue) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
   </section>
 
   <section class="card">

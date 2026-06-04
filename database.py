@@ -67,10 +67,21 @@ _VARIANT_STATS_SQL = """
 # Read queries
 # --------------------------------------------------------------------------
 
-def list_artworks_with_variants():
-    """Every artwork with its variants (each carrying computed stock numbers)."""
+def list_artworks_with_variants(query=None):
+    """Every artwork with its variants (each carrying computed stock numbers).
+
+    If `query` is given, only artworks whose title matches are returned.
+    """
     conn = get_connection()
-    artworks = conn.execute("SELECT * FROM artworks ORDER BY title").fetchall()
+    if query:
+        artworks = conn.execute(
+            "SELECT * FROM artworks WHERE title LIKE ? ORDER BY title",
+            (f"%{query}%",),
+        ).fetchall()
+    else:
+        artworks = conn.execute(
+            "SELECT * FROM artworks ORDER BY title"
+        ).fetchall()
     result = []
     for art in artworks:
         rows = conn.execute(
@@ -276,48 +287,187 @@ def update_artwork_image(artwork_id, image_path):
     conn.close()
 
 
+def update_artwork(artwork_id, title, year):
+    """Edit an artwork's title and year."""
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE artworks SET title = ?, year = ? WHERE id = ?",
+            (title, year, artwork_id),
+        )
+    conn.close()
+
+
+def delete_artwork(artwork_id):
+    """Delete an artwork and everything under it (editions, copies cascade).
+
+    Returns the artwork's image filename (if any) so the caller can remove it.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT image_path FROM artworks WHERE id = ?", (artwork_id,)
+    ).fetchone()
+    with conn:
+        conn.execute("DELETE FROM artworks WHERE id = ?", (artwork_id,))
+    conn.close()
+    return row["image_path"] if row else None
+
+
+def update_variant(variant_id, size, paper, price, edition_size):
+    """Edit an edition. Returns an error message, or None on success.
+
+    The edition size cannot be set below the number already printed.
+    Already-sold copies keep the price recorded at sale time; the new price
+    only affects future sales.
+    """
+    conn = get_connection()
+    printed = conn.execute(
+        "SELECT COUNT(*) AS n FROM copies WHERE variant_id = ?", (variant_id,)
+    ).fetchone()["n"]
+    if edition_size < printed:
+        conn.close()
+        return (f"La taille d'édition ne peut pas être inférieure au nombre "
+                f"déjà imprimé ({printed}).")
+    with conn:
+        conn.execute(
+            """UPDATE variants
+               SET size = ?, paper = ?, price = ?, edition_size = ?
+               WHERE id = ?""",
+            (size, paper, price, edition_size, variant_id),
+        )
+    conn.close()
+    return None
+
+
+def delete_variant(variant_id):
+    """Delete an edition and its copies (cascade)."""
+    conn = get_connection()
+    with conn:
+        conn.execute("DELETE FROM variants WHERE id = ?", (variant_id,))
+    conn.close()
+
+
 # --------------------------------------------------------------------------
 # Sales reporting
 # --------------------------------------------------------------------------
 
-def sales_totals():
-    """Overall sold count and total revenue."""
+def _date_filter(column, start, end):
+    """Return (sql_fragment, params) for an optional inclusive date range.
+
+    The fragment starts with ' AND ' so it appends after an existing WHERE.
+    Dates are 'YYYY-MM-DD' strings, compared lexicographically.
+    """
+    frag, params = "", []
+    if start:
+        frag += f" AND {column} >= ?"
+        params.append(start)
+    if end:
+        frag += f" AND {column} <= ?"
+        params.append(end)
+    return frag, params
+
+
+def sales_totals(start=None, end=None):
+    """Overall sold count and total revenue (optionally within a date range)."""
+    frag, params = _date_filter("sold_date", start, end)
     conn = get_connection()
     row = conn.execute(
-        """SELECT COUNT(*) AS sold, COALESCE(SUM(sale_price), 0) AS revenue
-           FROM copies WHERE status = 'sold'"""
+        "SELECT COUNT(*) AS sold, COALESCE(SUM(sale_price), 0) AS revenue "
+        "FROM copies WHERE status = 'sold'" + frag, params
     ).fetchone()
     conn.close()
     return row
 
 
-def revenue_by_channel():
+def revenue_by_channel(start=None, end=None):
     """Sold count and revenue grouped by sales channel."""
+    frag, params = _date_filter("sold_date", start, end)
     conn = get_connection()
     rows = conn.execute(
-        """SELECT COALESCE(NULLIF(TRIM(channel), ''), 'Non précisé') AS channel,
-                  COUNT(*) AS sold,
-                  COALESCE(SUM(sale_price), 0) AS revenue
-           FROM copies WHERE status = 'sold'
-           GROUP BY channel ORDER BY revenue DESC"""
+        "SELECT COALESCE(NULLIF(TRIM(channel), ''), 'Non précisé') AS channel, "
+        "COUNT(*) AS sold, COALESCE(SUM(sale_price), 0) AS revenue "
+        "FROM copies WHERE status = 'sold'" + frag +
+        " GROUP BY channel ORDER BY revenue DESC", params
     ).fetchall()
     conn.close()
     return rows
 
 
-def revenue_by_month():
+def revenue_by_month(start=None, end=None):
     """Sold count and revenue grouped by month (YYYY-MM), newest first."""
+    frag, params = _date_filter("sold_date", start, end)
     conn = get_connection()
     rows = conn.execute(
-        """SELECT substr(sold_date, 1, 7) AS month,
-                  COUNT(*) AS sold,
-                  COALESCE(SUM(sale_price), 0) AS revenue
-           FROM copies
-           WHERE status = 'sold' AND sold_date IS NOT NULL
-           GROUP BY month ORDER BY month DESC"""
+        "SELECT substr(sold_date, 1, 7) AS month, COUNT(*) AS sold, "
+        "COALESCE(SUM(sale_price), 0) AS revenue FROM copies "
+        "WHERE status = 'sold' AND sold_date IS NOT NULL" + frag +
+        " GROUP BY month ORDER BY month DESC", params
     ).fetchall()
     conn.close()
     return rows
+
+
+def best_sellers(start=None, end=None, limit=10):
+    """Top editions by revenue (optionally within a date range)."""
+    frag, params = _date_filter("c.sold_date", start, end)
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT a.title AS artwork, v.size AS size, COUNT(*) AS sold, "
+        "COALESCE(SUM(c.sale_price), 0) AS revenue "
+        "FROM copies c JOIN variants v ON v.id = c.variant_id "
+        "JOIN artworks a ON a.id = v.artwork_id "
+        "WHERE c.status = 'sold'" + frag +
+        " GROUP BY c.variant_id ORDER BY revenue DESC, sold DESC LIMIT ?",
+        params + [limit]
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def profit_by_artwork(start=None, end=None):
+    """Per-artwork profit = its sales revenue − its share of print costs.
+
+    A print session's cost is split across the editions it printed, in
+    proportion to quantity. General expenses (frames, fuel, VAT…) are NOT
+    attributed to a single artwork, so they are excluded here.
+    """
+    rev_frag, rev_params = _date_filter("c.sold_date", start, end)
+    cost_frag, cost_params = _date_filter("pr.date", start, end)
+    conn = get_connection()
+    arts = conn.execute("SELECT id, title FROM artworks ORDER BY title").fetchall()
+
+    revenue = {r["artwork_id"]: r for r in conn.execute(
+        "SELECT v.artwork_id AS artwork_id, COUNT(*) AS sold, "
+        "COALESCE(SUM(c.sale_price), 0) AS revenue "
+        "FROM copies c JOIN variants v ON v.id = c.variant_id "
+        "WHERE c.status = 'sold'" + rev_frag +
+        " GROUP BY v.artwork_id", rev_params).fetchall()}
+
+    cost = {r["artwork_id"]: r["print_cost"] for r in conn.execute(
+        "SELECT v.artwork_id AS artwork_id, "
+        "COALESCE(SUM(pr.cost * pri.quantity * 1.0 / rt.total_qty), 0) AS print_cost "
+        "FROM print_run_items pri "
+        "JOIN print_runs pr ON pr.id = pri.print_run_id "
+        "JOIN variants v ON v.id = pri.variant_id "
+        "JOIN (SELECT print_run_id, SUM(quantity) AS total_qty "
+        "      FROM print_run_items GROUP BY print_run_id) rt "
+        "     ON rt.print_run_id = pri.print_run_id "
+        "WHERE 1=1" + cost_frag +
+        " GROUP BY v.artwork_id", cost_params).fetchall()}
+
+    conn.close()
+    result = []
+    for a in arts:
+        r = revenue.get(a["id"])
+        rev = r["revenue"] if r else 0
+        sold = r["sold"] if r else 0
+        pc = cost.get(a["id"], 0) or 0
+        result.append({
+            "title": a["title"], "sold": sold, "revenue": rev,
+            "print_cost": pc, "profit": rev - pc,
+        })
+    result.sort(key=lambda x: x["profit"], reverse=True)
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -554,11 +704,13 @@ def list_print_runs():
     return result
 
 
-def print_costs_total():
-    """Sum of all print-session costs (used in the profit report)."""
+def print_costs_total(start=None, end=None):
+    """Sum of print-session costs (optionally within a date range)."""
+    frag, params = _date_filter("date", start, end)
     conn = get_connection()
     row = conn.execute(
-        "SELECT COALESCE(SUM(cost), 0) AS total FROM print_runs"
+        "SELECT COALESCE(SUM(cost), 0) AS total FROM print_runs WHERE 1=1" + frag,
+        params
     ).fetchone()
     conn.close()
     return row["total"]
@@ -649,22 +801,86 @@ def delete_expense(expense_id):
     conn.close()
 
 
-def expenses_total():
+def expenses_total(start=None, end=None):
+    frag, params = _date_filter("date", start, end)
     conn = get_connection()
     row = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses"
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE 1=1" + frag,
+        params
     ).fetchone()
     conn.close()
     return row["total"]
 
 
-def expenses_by_category():
+def expenses_by_category(start=None, end=None):
+    frag, params = _date_filter("date", start, end)
     conn = get_connection()
     rows = conn.execute(
-        """SELECT COALESCE(NULLIF(TRIM(category), ''), 'Non précisé') AS category,
-                  COUNT(*) AS count,
-                  COALESCE(SUM(amount), 0) AS total
-           FROM expenses GROUP BY category ORDER BY total DESC"""
+        "SELECT COALESCE(NULLIF(TRIM(category), ''), 'Non précisé') AS category, "
+        "COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total "
+        "FROM expenses WHERE 1=1" + frag +
+        " GROUP BY category ORDER BY total DESC", params
     ).fetchall()
     conn.close()
     return rows
+
+
+# --------------------------------------------------------------------------
+# Dashboard summary + low-stock view
+# --------------------------------------------------------------------------
+
+def dashboard_summary():
+    """Headline numbers for the dashboard tiles."""
+    conn = get_connection()
+    artworks = conn.execute("SELECT COUNT(*) AS c FROM artworks").fetchone()["c"]
+    variants = conn.execute("SELECT COUNT(*) AS c FROM variants").fetchone()["c"]
+    in_stock = conn.execute(
+        "SELECT COUNT(*) AS c FROM copies WHERE status = 'printed'"
+    ).fetchone()["c"]
+    stock_value = conn.execute(
+        """SELECT COALESCE(SUM(v.price), 0) AS t
+           FROM copies c JOIN variants v ON v.id = c.variant_id
+           WHERE c.status = 'printed'"""
+    ).fetchone()["t"]
+    month = conn.execute(
+        """SELECT COUNT(*) AS c, COALESCE(SUM(sale_price), 0) AS r
+           FROM copies
+           WHERE status = 'sold'
+             AND substr(sold_date, 1, 7) = strftime('%Y-%m', 'now', 'localtime')"""
+    ).fetchone()
+    conn.close()
+    return {
+        "artworks": artworks, "variants": variants, "in_stock": in_stock,
+        "stock_value": stock_value,
+        "month_sold": month["c"], "month_revenue": month["r"],
+    }
+
+
+def low_stock_variants(threshold):
+    """Editions whose stock is at or below `threshold` and that can still be
+    printed (edition not yet fully printed). Lowest stock first."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT v.id, v.size, v.paper, v.edition_size, a.title AS artwork_title,
+                  COUNT(c.id) AS printed,
+                  COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0) AS sold
+           FROM variants v
+           JOIN artworks a ON a.id = v.artwork_id
+           LEFT JOIN copies c ON c.variant_id = v.id
+           GROUP BY v.id
+           HAVING (COUNT(c.id)
+                   - COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0)) <= ?
+              AND (v.edition_size - COUNT(c.id)) > 0
+           ORDER BY (COUNT(c.id)
+                     - COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0)) ASC,
+                    a.title""",
+        (threshold,),
+    ).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["in_stock"] = d["printed"] - d["sold"]
+        d["remaining"] = d["edition_size"] - d["printed"]
+        result.append(d)
+    return result

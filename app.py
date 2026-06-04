@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 
 from flask import (Flask, Response, flash, redirect, render_template, request,
                    session, url_for)
+from PIL import Image, ImageOps
 
 import database
 
@@ -23,8 +24,14 @@ app.config["SECRET_KEY"] = os.environ.get("WATERCOLOR_SECRET", "dev-secret-chang
 
 # --- Image upload config ---------------------------------------------------
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
-app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB max per upload
+# Accept large originals (phone photos) — they get compressed down on upload.
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25 MB max per upload
 IMAGES_DIR = os.path.join(app.static_folder, "images")
+MAX_IMAGE_DIM = 1400   # longest side after downscaling, in pixels
+JPEG_QUALITY = 85      # re-encode quality (good balance size/quality)
+
+# Editions with this many copies in stock (or fewer) show up in "À réimprimer".
+LOW_STOCK_THRESHOLD = 3
 
 FRENCH_MONTHS = ["", "janvier", "février", "mars", "avril", "mai", "juin",
                  "juillet", "août", "septembre", "octobre", "novembre",
@@ -128,28 +135,59 @@ def _allowed_image(filename):
             and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS)
 
 
-def save_uploaded_image(file):
-    """Save an uploaded image under static/images with a random name.
+def _flatten_to_rgb(img):
+    """Convert any image mode to RGB, flattening transparency onto white."""
+    if img.mode in ("RGBA", "LA", "P", "PA"):
+        img = img.convert("RGBA")
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1])
+        return background
+    return img.convert("RGB")
 
-    Returns (filename, error_message). filename is None if no file was sent;
-    error_message is set only when a file was sent but rejected.
+
+def save_uploaded_image(file):
+    """Compress + store an uploaded image under static/images.
+
+    Large photos are downscaled to MAX_IMAGE_DIM and re-encoded as JPEG, so a
+    7 MB phone photo becomes a few hundred KB. Returns (filename, error):
+    filename is None if no file was sent; error is set if a file was rejected.
     """
     if not file or not file.filename:
         return None, None
     if not _allowed_image(file.filename):
         return None, "Format d'image non supporté (jpg, png, gif, webp)."
-    ext = file.filename.rsplit(".", 1)[1].lower()
-    fname = f"{uuid.uuid4().hex}.{ext}"
-    os.makedirs(IMAGES_DIR, exist_ok=True)
-    file.save(os.path.join(IMAGES_DIR, fname))
-    return fname, None
+    try:
+        img = Image.open(file.stream)
+        img = ImageOps.exif_transpose(img)             # honour phone rotation
+        img.thumbnail((MAX_IMAGE_DIM, MAX_IMAGE_DIM))   # downscale, keep ratio
+        img = _flatten_to_rgb(img)
+        fname = f"{uuid.uuid4().hex}.jpg"
+        os.makedirs(IMAGES_DIR, exist_ok=True)
+        img.save(os.path.join(IMAGES_DIR, fname), "JPEG",
+                 quality=JPEG_QUALITY, optimize=True)
+        return fname, None
+    except Exception:
+        return None, "Image illisible ou corrompue."
 
 
 @app.route("/")
 def index():
-    """Dashboard: every artwork with its variants and live stock numbers."""
+    """Dashboard: summary tiles + every artwork with live stock numbers."""
+    q = request.args.get("q", "").strip()
     return render_template(
         "index.html",
+        groups=database.list_artworks_with_variants(q or None),
+        q=q,
+        summary=database.dashboard_summary(),
+        low_stock_count=len(database.low_stock_variants(LOW_STOCK_THRESHOLD)),
+    )
+
+
+@app.route("/catalogue")
+def catalogue():
+    """Printable catalogue / price list with photos."""
+    return render_template(
+        "catalogue.html",
         groups=database.list_artworks_with_variants(),
     )
 
@@ -189,6 +227,39 @@ def artwork_detail(artwork_id):
         variants=database.variants_for_artwork(artwork_id),
         today=date.today().isoformat(),
     )
+
+
+@app.route("/artworks/<int:artwork_id>/edit", methods=["POST"])
+def update_artwork(artwork_id):
+    artwork = database.get_artwork(artwork_id)
+    if artwork is None:
+        flash("Œuvre introuvable.", "error")
+        return redirect(url_for("index"))
+    title = request.form.get("title", "").strip()
+    year = request.form.get("year", "").strip()
+    if not title:
+        flash("Veuillez saisir un titre.", "error")
+    else:
+        database.update_artwork(
+            artwork_id, title, int(year) if year.isdigit() else None)
+        flash("Œuvre mise à jour.", "success")
+    return redirect(url_for("artwork_detail", artwork_id=artwork_id))
+
+
+@app.route("/artworks/<int:artwork_id>/supprimer", methods=["POST"])
+def delete_artwork(artwork_id):
+    artwork = database.get_artwork(artwork_id)
+    if artwork is None:
+        flash("Œuvre introuvable.", "error")
+        return redirect(url_for("index"))
+    image = database.delete_artwork(artwork_id)
+    if image:  # remove the photo file too
+        try:
+            os.remove(os.path.join(IMAGES_DIR, image))
+        except OSError:
+            pass
+    flash(f"Œuvre « {artwork['title']} » supprimée.", "success")
+    return redirect(url_for("index"))
 
 
 # ---- Variants ------------------------------------------------------------
@@ -253,7 +324,49 @@ def variant_detail(variant_id):
         variant=variant,
         copies=database.copies_for_variant(variant_id),
         today=date.today().isoformat(),
+        formats=database.list_formats(),
+        papers=database.list_papers(),
     )
+
+
+@app.route("/variants/<int:variant_id>/edit", methods=["POST"])
+def update_variant(variant_id):
+    variant = database.get_variant(variant_id)
+    if variant is None:
+        flash("Édition introuvable.", "error")
+        return redirect(url_for("index"))
+    size = request.form.get("size", "").strip()
+    paper = request.form.get("paper", "").strip() or None
+    price_raw = request.form.get("price", "").strip()
+    edition_raw = request.form.get("edition_size", "").strip()
+
+    if not size:
+        flash("Le format est obligatoire.", "error")
+        return redirect(url_for("variant_detail", variant_id=variant_id))
+    try:
+        price = float(price_raw) if price_raw else 0.0
+    except ValueError:
+        flash("Le prix doit être un nombre.", "error")
+        return redirect(url_for("variant_detail", variant_id=variant_id))
+    if not edition_raw.isdigit() or int(edition_raw) < 1:
+        flash("La taille de l'édition doit être un entier d'au moins 1.", "error")
+        return redirect(url_for("variant_detail", variant_id=variant_id))
+
+    error = database.update_variant(variant_id, size, paper, price, int(edition_raw))
+    flash(error or "Édition mise à jour.", "error" if error else "success")
+    return redirect(url_for("variant_detail", variant_id=variant_id))
+
+
+@app.route("/variants/<int:variant_id>/supprimer", methods=["POST"])
+def delete_variant(variant_id):
+    variant = database.get_variant(variant_id)
+    if variant is None:
+        flash("Édition introuvable.", "error")
+        return redirect(url_for("index"))
+    artwork_id = variant["artwork_id"]
+    database.delete_variant(variant_id)
+    flash("Édition supprimée.", "success")
+    return redirect(url_for("artwork_detail", artwork_id=artwork_id))
 
 
 @app.route("/variants/<int:variant_id>/print", methods=["POST"])
@@ -311,6 +424,22 @@ def sell_copy(copy_id):
     )
 
 
+@app.route("/copies/<int:copy_id>/recu")
+def receipt(copy_id):
+    """Printable receipt for a single sold copy."""
+    copy = database.get_copy(copy_id)
+    if copy is None:
+        flash("Exemplaire introuvable.", "error")
+        return redirect(url_for("index"))
+    if copy["status"] != "sold":
+        flash("Cet exemplaire n'est pas vendu.", "error")
+        return redirect(url_for("variant_detail", variant_id=copy["variant_id"]))
+    return render_template(
+        "receipt.html", copy=copy,
+        variant=database.get_variant(copy["variant_id"]),
+    )
+
+
 @app.route("/copies/<int:copy_id>/unsell", methods=["POST"])
 def unsell_copy(copy_id):
     """Undo a sale — put the copy back in stock (e.g. after a misclick)."""
@@ -358,19 +487,26 @@ def update_artwork_photo(artwork_id):
 
 @app.route("/rapport")
 def report():
-    totals = database.sales_totals()
-    print_costs = database.print_costs_total()
-    expenses_total = database.expenses_total()
+    start = request.args.get("start", "").strip() or None
+    end = request.args.get("end", "").strip() or None
+    totals = database.sales_totals(start, end)
+    print_costs = database.print_costs_total(start, end)
+    expenses_total = database.expenses_total(start, end)
     net = totals["revenue"] - print_costs - expenses_total
+    current_year = date.today().year
     return render_template(
         "report.html",
         totals=totals,
-        by_channel=database.revenue_by_channel(),
-        by_month=database.revenue_by_month(),
+        by_channel=database.revenue_by_channel(start, end),
+        by_month=database.revenue_by_month(start, end),
         print_costs=print_costs,
         expenses_total=expenses_total,
-        expenses_by_category=database.expenses_by_category(),
+        expenses_by_category=database.expenses_by_category(start, end),
+        best_sellers=database.best_sellers(start, end),
+        profit_by_artwork=database.profit_by_artwork(start, end),
         net=net,
+        start=start or "", end=end or "",
+        year_start=f"{current_year}-01-01", year_end=f"{current_year}-12-31",
     )
 
 
@@ -562,6 +698,8 @@ def print_run_page():
         "print_run.html",
         groups=database.list_artworks_with_variants(),
         today=date.today().isoformat(),
+        low_stock=database.low_stock_variants(LOW_STOCK_THRESHOLD),
+        low_threshold=LOW_STOCK_THRESHOLD,
     )
 
 

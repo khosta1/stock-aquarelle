@@ -170,6 +170,61 @@ ul.stats li strong { font-size: 1.35rem; }
 .amount-pos { color: var(--good); }
 .amount-neg { color: var(--bad); }
 
+/* Dashboard tiles, search and reprint alert */
+.tiles { gap: 1rem; margin-bottom: 1.25rem; }
+.tiles li {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  min-width: 130px;
+}
+.reprint-alert { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.search-bar { margin-bottom: 1.25rem; }
+
+/* Receipt */
+.receipt { max-width: 420px; }
+.receipt h1 { margin-top: 0; font-size: 1.4rem; }
+.receipt-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.receipt-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); }
+.receipt-table td:last-child { text-align: right; }
+.receipt-total td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--ink); border-bottom: none; }
+
+@media print {
+  .site-header, .no-print, .flashes { display: none !important; }
+  body { background: #fff; }
+  .receipt.card { border: none; padding: 0; }
+}
+
+/* Catalogue */
+.print-only { display: none; }
+.catalogue-head h1 { margin: 0 0 1rem; }
+.cat-item {
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--line);
+  page-break-inside: avoid;
+}
+.cat-photo {
+  width: 120px; height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.cat-body { flex: 1; }
+.cat-body h2 { margin: 0 0 0.4rem; font-size: 1.15rem; }
+.cat-prices { width: 100%; border-collapse: collapse; }
+.cat-prices td { padding: 0.25rem 0.4rem; border-bottom: 1px dotted var(--line); }
+.cat-price { text-align: right; font-weight: 600; white-space: nowrap; }
+.cat-stock { width: 8rem; }
+
+@media print {
+  .print-only { display: block; }
+  .container { max-width: none; padding: 0; }
+}
+
 /* Copies grid */
 .copies-grid {
   display: grid;

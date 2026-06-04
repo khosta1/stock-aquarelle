@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Catalogue — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head no-print">
+    <h1>Catalogue / liste de prix</h1>
+    <button class="btn" onclick="window.print()">🖨️ Imprimer</button>
+  </div>
+
+  <div class="catalogue-head print-only">
+    <h1>Catalogue — Stock Aquarelle</h1>
+  </div>
+
+  {% if not groups %}
+    <p class="muted">Aucune œuvre à présenter.</p>
+  {% endif %}
+
+  {% for group in groups %}
+    {% if group.variants %}
+      <section class="cat-item">
+        {% if group.artwork.image_path %}
+          <img class="cat-photo"
+               src="{{ url_for('static', filename='images/' + group.artwork.image_path) }}"
+               alt="">
+        {% endif %}
+        <div class="cat-body">
+          <h2>{{ group.artwork.title }}
+            {% if group.artwork.year %}<span class="muted">({{ group.artwork.year }})</span>{% endif %}
+          </h2>
+          <table class="cat-prices">
+            <tbody>
+              {% for v in group.variants %}
+                <tr>
+                  <td>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}</td>
+                  <td class="cat-stock muted">
+                    {% if v.in_stock > 0 %}en stock : {{ v.in_stock }}{% else %}épuisé{% endif %}
+                  </td>
+                  <td class="cat-price">{{ '%.2f'|format(v.price) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+  {% endfor %}
+{% endblock %}

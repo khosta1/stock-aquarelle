@@ -4,13 +4,44 @@
   <div class="page-head">
     <h1>Tableau de bord</h1>
     <div class="form-actions">
+      <a class="btn btn-ghost" href="{{ url_for('catalogue') }}">📄 Catalogue</a>
       <a class="btn btn-ghost" href="{{ url_for('settings') }}">⚙ Paramètres globaux</a>
       <a class="btn" href="{{ url_for('add_artwork') }}">+ Ajouter une œuvre</a>
     </div>
   </div>
 
+  <ul class="stats tiles">
+    <li><span>Œuvres</span><strong>{{ summary.artworks }}</strong></li>
+    <li><span>Éditions</span><strong>{{ summary.variants }}</strong></li>
+    <li><span>En stock</span><strong>{{ summary.in_stock }}</strong></li>
+    <li><span>Valeur du stock</span><strong>{{ '%.2f'|format(summary.stock_value) }}</strong></li>
+    <li><span>Ventes ce mois</span>
+      <strong>{{ summary.month_sold }} · {{ '%.2f'|format(summary.month_revenue) }}</strong></li>
+  </ul>
+
+  {% if low_stock_count > 0 %}
+    <div class="flash flash-error reprint-alert">
+      <span>⚠ {{ low_stock_count }} édition(s) à réimprimer (stock bas).</span>
+      <a class="btn btn-small" href="{{ url_for('print_run_page') }}#a-reimprimer">Voir</a>
+    </div>
+  {% endif %}
+
+  <form method="get" class="form-inline search-bar">
+    <label>Rechercher une œuvre
+      <input type="text" name="q" value="{{ q }}" placeholder="titre…">
+    </label>
+    <button type="submit" class="btn btn-small">Rechercher</button>
+    {% if q %}
+      <a class="btn btn-small btn-ghost" href="{{ url_for('index') }}">Réinitialiser</a>
+    {% endif %}
+  </form>
+
   {% if not groups %}
-    <p class="muted">Aucune œuvre pour l'instant. Commencez par en ajouter une.</p>
+    {% if q %}
+      <p class="muted">Aucune œuvre ne correspond à « {{ q }} ».</p>
+    {% else %}
+      <p class="muted">Aucune œuvre pour l'instant. Commencez par en ajouter une.</p>
+    {% endif %}
   {% endif %}
 
   {% for group in groups %}
