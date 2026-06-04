@@ -868,11 +868,13 @@ def print_costs_total(start=None, end=None):
 # --------------------------------------------------------------------------
 
 def create_sale_batch(sold_date, channel, items):
-    """Sell `quantity` in-stock copies for each edition, at the edition's price.
+    """Sell `quantity` in-stock copies for each edition.
 
-    `items` is a list of (variant_id, quantity). The lowest-numbered in-stock
-    copies are sold first. If an edition has fewer in stock than requested,
-    all available are sold and a message is returned for the shortfall.
+    `items` is a list of (variant_id, quantity, price). If price is None, the
+    edition's own price is used; otherwise the given price overrides it (useful
+    when the same print sells for different prices depending on the venue).
+    Lowest-numbered in-stock copies are sold first; if fewer are in stock than
+    requested, all available are sold and a message reports the shortfall.
 
     Returns (total_sold, summary, errors):
       - summary: list of dicts {label, count, price}
@@ -881,7 +883,7 @@ def create_sale_batch(sold_date, channel, items):
     conn = get_connection()
     summary, errors = [], []
     with conn:
-        for variant_id, quantity in items:
+        for variant_id, quantity, price_override in items:
             if quantity < 1:
                 continue
             variant = conn.execute(
@@ -904,7 +906,7 @@ def create_sale_batch(sold_date, channel, items):
                               f"{quantity} demandé(s) — {len(copies)} vendu(s).")
             if not copies:
                 continue
-            price = variant["price"]
+            price = price_override if price_override is not None else variant["price"]
             for cp in copies:
                 conn.execute(
                     """UPDATE copies

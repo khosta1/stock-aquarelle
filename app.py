@@ -790,13 +790,28 @@ def sell_batch_page():
         channel = request.form.get("channel", "").strip() or None
 
         items = []
+        bad_price = False
         for key, value in request.form.items():
-            if key.startswith("qty_") and value.strip():
+            if not (key.startswith("qty_") and value.strip()):
+                continue
+            try:
+                vid, qty = int(key[4:]), int(value)
+            except ValueError:
+                continue
+            if qty <= 0:
+                continue
+            price_raw = request.form.get(f"price_{vid}", "").strip()
+            price = None
+            if price_raw:
                 try:
-                    items.append((int(key[4:]), int(value)))
+                    price = float(price_raw)
                 except ValueError:
-                    continue
-        items = [(vid, qty) for vid, qty in items if qty > 0]
+                    bad_price = True
+            items.append((vid, qty, price))
+
+        if bad_price:
+            flash("Un prix de vente saisi n'est pas un nombre valide.", "error")
+            return redirect(url_for("sell_batch_page"))
         if not items:
             flash("Indiquez une quantité pour au moins une édition.", "error")
             return redirect(url_for("sell_batch_page"))

@@ -7,8 +7,9 @@
   </div>
   <p class="muted">
     Indiquez combien d'exemplaires de chaque édition vous avez vendus. Le prix de
-    vente est repris automatiquement du prix de l'édition. Les exemplaires en
-    stock aux plus petits numéros sont vendus en premier.
+    vente est pré-rempli avec celui de l'édition, mais vous pouvez l'ajuster
+    (il peut varier selon le lieu de vente). Les exemplaires en stock aux plus
+    petits numéros sont vendus en premier.
   </p>
 
   {% set ns = namespace(has_any=false) %}
@@ -20,7 +21,7 @@
           <h2>{{ group.artwork.title }}</h2>
           <table class="stock">
             <thead>
-              <tr><th>Format</th><th>En stock</th><th>Prix</th>
+              <tr><th>Format</th><th>En stock</th><th>Prix de vente</th>
                   <th>Quantité vendue</th></tr>
             </thead>
             <tbody>
@@ -28,7 +29,14 @@
                 <tr class="{{ 'soldout' if v.in_stock <= 0 }}">
                   <td>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}</td>
                   <td>{{ v.in_stock }}</td>
-                  <td>{{ '%.2f'|format(v.price) }}</td>
+                  <td>
+                    {% if v.in_stock > 0 %}
+                      <input type="number" class="qty-input" name="price_{{ v.id }}"
+                             step="0.01" min="0" value="{{ '%.2f'|format(v.price) }}">
+                    {% else %}
+                      {{ '%.2f'|format(v.price) }}
+                    {% endif %}
+                  </td>
                   <td>
                     {% if v.in_stock > 0 %}
                       <input type="number" class="qty-input" name="qty_{{ v.id }}"
