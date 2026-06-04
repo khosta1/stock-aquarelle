@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Facture {{ invoice.number }}{% endblock %}
+{% block content %}
+  <div class="page-head no-print">
+    <a href="{{ url_for('invoices') }}">← Factures</a>
+    <button class="btn" onclick="window.print()">🖨️ Imprimer / PDF</button>
+  </div>
+
+  <div class="invoice card">
+    <div class="invoice-head">
+      <div class="invoice-seller">
+        {% if billing.seller_name %}<strong>{{ billing.seller_name }}</strong><br>{% endif %}
+        {% if billing.seller_address %}<span class="pre">{{ billing.seller_address }}</span><br>{% endif %}
+        {% if billing.seller_siret %}SIRET : {{ billing.seller_siret }}<br>{% endif %}
+        {% if billing.seller_status %}{{ billing.seller_status }}{% endif %}
+      </div>
+      <div class="invoice-meta">
+        <h1>Facture</h1>
+        <div>N° {{ invoice.number }}</div>
+        <div>Date : {{ invoice.date | fr_date }}</div>
+      </div>
+    </div>
+
+    <div class="invoice-client">
+      <div class="muted">Facturé à</div>
+      <strong>{{ invoice.customer_name }}</strong>
+      {% if invoice.customer_address %}<br><span class="pre">{{ invoice.customer_address }}</span>{% endif %}
+    </div>
+
+    <table class="invoice-table">
+      <thead>
+        <tr><th>Désignation</th><th>N° exemplaire</th><th>Qté</th>
+            <th>Prix</th><th>Montant</th></tr>
+      </thead>
+      <tbody>
+        {% for it in invoice.lines %}
+          <tr>
+            <td>{{ it.designation }}</td>
+            <td>n°{{ it.edition_no }}</td>
+            <td>1</td>
+            <td>{{ '%.2f'|format(it.unit_price) }}</td>
+            <td>{{ '%.2f'|format(it.unit_price) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="invoice-total">
+          <td colspan="4">Total</td>
+          <td>{{ '%.2f'|format(invoice.total) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <p class="invoice-vat">{{ billing.vat_mention }}</p>
+    {% if invoice.note %}<p>{{ invoice.note }}</p>{% endif %}
+    {% if billing.invoice_footer %}
+      <p class="invoice-footer pre muted">{{ billing.invoice_footer }}</p>
+    {% endif %}
+  </div>
+{% endblock %}

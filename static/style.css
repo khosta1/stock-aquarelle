@@ -120,7 +120,8 @@ ul.stats li strong { font-size: 1.35rem; }
 }
 .form input[type=text],
 .form input[type=number],
-.form input[type=date] {
+.form input[type=date],
+.form textarea {
   display: block;
   width: 100%;
   max-width: 360px;
@@ -130,6 +131,7 @@ ul.stats li strong { font-size: 1.35rem; }
   border-radius: 7px;
   font-size: 1rem;
   font-weight: 400;
+  font-family: inherit;
 }
 .form-actions { margin-top: 0.5rem; display: flex; gap: 0.6rem; }
 
@@ -223,6 +225,23 @@ ul.stats li strong { font-size: 1.35rem; }
 @media print {
   .print-only { display: block; }
   .container { max-width: none; padding: 0; }
+}
+
+/* Invoice */
+.pre { white-space: pre-line; }
+.invoice { max-width: 720px; }
+.invoice-head { display: flex; justify-content: space-between; gap: 2rem; margin-bottom: 1.5rem; }
+.invoice-meta { text-align: right; }
+.invoice-meta h1 { margin: 0 0 0.3rem; }
+.invoice-client { margin-bottom: 1.5rem; }
+.invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+.invoice-table th, .invoice-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
+.invoice-table th:nth-child(n+3), .invoice-table td:nth-child(n+3) { text-align: right; }
+.invoice-total td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--ink); }
+.invoice-vat { font-style: italic; }
+
+@media print {
+  .invoice.card { border: none; padding: 0; }
 }
 
 /* Copies grid */

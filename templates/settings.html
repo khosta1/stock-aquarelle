@@ -10,6 +10,40 @@
     pas les enregistrements existants — il disparaît simplement des futurs menus.
   </p>
 
+  {# ---------- Informations de facturation ---------- #}
+  <section class="card">
+    <h2>Informations de facturation</h2>
+    <p class="muted">Ces informations apparaîtront sur vos factures.</p>
+    <form method="post" action="{{ url_for('save_billing') }}" class="form">
+      <label>Nom / raison sociale
+        <input type="text" name="seller_name" value="{{ billing.seller_name or '' }}"
+               placeholder="ex. Marie Dupont">
+      </label>
+      <label>Adresse
+        <textarea name="seller_address" rows="3"
+                  placeholder="ex. 12 rue des Arts&#10;75000 Paris">{{ billing.seller_address or '' }}</textarea>
+      </label>
+      <label>SIRET
+        <input type="text" name="seller_siret" value="{{ billing.seller_siret or '' }}"
+               placeholder="ex. 123 456 789 00012">
+      </label>
+      <label>Statut juridique
+        <input type="text" name="seller_status" value="{{ billing.seller_status or '' }}"
+               placeholder="ex. Micro-entrepreneur">
+      </label>
+      <label>Mention TVA
+        <input type="text" name="vat_mention" value="{{ billing.vat_mention or '' }}">
+      </label>
+      <label>Pied de page (conditions, IBAN…)
+        <textarea name="invoice_footer" rows="2"
+                  placeholder="ex. Paiement à réception. IBAN : FR76 …">{{ billing.invoice_footer or '' }}</textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn">Enregistrer les informations</button>
+      </div>
+    </form>
+  </section>
+
   {# ---------- Formats ---------- #}
   <section class="card">
     <h2>Formats</h2>

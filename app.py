@@ -587,14 +587,83 @@ def export_backup():
 
 # ---- Global parameters (settings) ----------------------------------------
 
+BILLING_KEYS = ["seller_name", "seller_address", "seller_siret",
+                "seller_status", "vat_mention", "invoice_footer"]
+DEFAULT_VAT_MENTION = "TVA non applicable, art. 293 B du CGI"
+
+
 @app.route("/parametres")
 def settings():
+    billing = database.get_settings()
+    billing.setdefault("vat_mention", DEFAULT_VAT_MENTION)
     return render_template(
         "settings.html",
         papers=database.list_papers(),
         formats=database.list_formats(),
         categories=database.list_expense_categories(),
+        billing=billing,
     )
+
+
+@app.route("/parametres/facturation", methods=["POST"])
+def save_billing():
+    values = {k: request.form.get(k, "").strip() for k in BILLING_KEYS}
+    database.save_settings(values)
+    flash("Informations de facturation enregistrées.", "success")
+    return redirect(url_for("settings"))
+
+
+# ---- Invoices (factures) -------------------------------------------------
+
+@app.route("/factures")
+def invoices():
+    return render_template("invoices.html", invoices=database.list_invoices())
+
+
+@app.route("/factures/nouvelle", methods=["GET", "POST"])
+def new_invoice():
+    if request.method == "POST":
+        inv_date = request.form.get("date", "").strip() or date.today().isoformat()
+        customer_name = request.form.get("customer_name", "").strip()
+        customer_address = request.form.get("customer_address", "").strip()
+        note = request.form.get("note", "").strip() or None
+        copy_ids = []
+        for cid in request.form.getlist("copy_ids"):
+            try:
+                copy_ids.append(int(cid))
+            except ValueError:
+                continue
+
+        if not customer_name:
+            flash("Indiquez le nom du client.", "error")
+        elif not copy_ids:
+            flash("Sélectionnez au moins un exemplaire à facturer.", "error")
+        else:
+            invoice_id, number, error = database.create_invoice(
+                inv_date, customer_name, customer_address, note, copy_ids)
+            if error:
+                flash(error, "error")
+            else:
+                flash(f"Facture {number} créée.", "success")
+                return redirect(url_for("view_invoice", invoice_id=invoice_id))
+
+    return render_template(
+        "invoice_new.html",
+        copies=database.uninvoiced_sold_copies(),
+        today=date.today().isoformat(),
+        form=request.form,
+    )
+
+
+@app.route("/factures/<int:invoice_id>")
+def view_invoice(invoice_id):
+    invoice = database.get_invoice(invoice_id)
+    if invoice is None:
+        flash("Facture introuvable.", "error")
+        return redirect(url_for("invoices"))
+    billing = database.get_settings()
+    billing.setdefault("vat_mention", DEFAULT_VAT_MENTION)
+    return render_template("invoice.html", invoice=invoice, billing=billing)
 
 
 @app.route("/parametres/papiers/ajouter", methods=["POST"])

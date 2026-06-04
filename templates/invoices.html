@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Factures — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <h1>Factures</h1>
+    <a class="btn" href="{{ url_for('new_invoice') }}">+ Nouvelle facture</a>
+  </div>
+
+  {% if not invoices %}
+    <p class="muted">Aucune facture émise pour l'instant.</p>
+  {% else %}
+    <section class="card">
+      <table class="stock">
+        <thead>
+          <tr><th>N°</th><th>Date</th><th>Client</th><th>Articles</th>
+              <th>Total</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for inv in invoices %}
+            <tr>
+              <td>{{ inv.number }}</td>
+              <td>{{ inv.date | fr_date }}</td>
+              <td>{{ inv.customer_name }}</td>
+              <td>{{ inv.line_count }}</td>
+              <td>{{ '%.2f'|format(inv.total) }}</td>
+              <td><a href="{{ url_for('view_invoice', invoice_id=inv.id) }}">Voir →</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+{% endblock %}

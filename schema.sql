@@ -104,3 +104,35 @@ CREATE TABLE IF NOT EXISTS expenses (
     note       TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ==========================================================================
+-- App settings (key/value): seller/billing info shown on invoices.
+-- ==========================================================================
+CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+
+-- ==========================================================================
+-- Invoices (factures). Lines snapshot the sold copy so the invoice stays a
+-- faithful record even if the copy/price changes later.
+-- ==========================================================================
+CREATE TABLE IF NOT EXISTS invoices (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    number           TEXT NOT NULL UNIQUE,
+    date             TEXT,
+    customer_name    TEXT,
+    customer_address TEXT,
+    note             TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS invoice_items (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id   INTEGER NOT NULL,
+    copy_id      INTEGER,        -- which sold copy, to prevent double-invoicing
+    designation  TEXT,           -- snapshot, e.g. "Coucher de soleil — A3"
+    edition_no   TEXT,           -- snapshot, e.g. "7/50"
+    unit_price   REAL NOT NULL DEFAULT 0,
+    FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE
+);

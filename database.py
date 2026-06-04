@@ -604,6 +604,153 @@ def delete_expense_category(category_id):
 
 
 # --------------------------------------------------------------------------
+# App settings (key/value) — seller / billing info
+# --------------------------------------------------------------------------
+
+def get_settings():
+    """All app settings as a dict (key -> value)."""
+    conn = get_connection()
+    rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+    conn.close()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def save_settings(values):
+    """Upsert a dict of key -> value."""
+    conn = get_connection()
+    with conn:
+        for key, value in values.items():
+            conn.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+    conn.close()
+
+
+# --------------------------------------------------------------------------
+# Invoices
+# --------------------------------------------------------------------------
+
+def uninvoiced_sold_copies():
+    """Sold copies not yet on any invoice, with context for selection."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT c.id, c.edition_number, c.sale_price, c.sold_date,
+                  c.customer, c.channel, v.size, v.edition_size,
+                  a.title AS artwork
+           FROM copies c
+           JOIN variants v ON v.id = c.variant_id
+           JOIN artworks a ON a.id = v.artwork_id
+           WHERE c.status = 'sold'
+             AND c.id NOT IN (SELECT copy_id FROM invoice_items
+                              WHERE copy_id IS NOT NULL)
+           ORDER BY c.sold_date DESC, a.title"""
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def create_invoice(inv_date, customer_name, customer_address, note, copy_ids):
+    """Create an invoice from selected sold copies. Returns (id, number, error).
+
+    Skips copies that aren't sold or are already invoiced. Lines snapshot the
+    copy details so the invoice stays fixed even if data changes later.
+    """
+    conn = get_connection()
+    valid = []
+    for cid in copy_ids:
+        row = conn.execute(
+            """SELECT c.id, c.edition_number, c.sale_price,
+                      v.size, v.edition_size, a.title
+               FROM copies c
+               JOIN variants v ON v.id = c.variant_id
+               JOIN artworks a ON a.id = v.artwork_id
+               WHERE c.id = ? AND c.status = 'sold'""", (cid,)
+        ).fetchone()
+        if row is None:
+            continue
+        taken = conn.execute(
+            "SELECT 1 FROM invoice_items WHERE copy_id = ?", (cid,)
+        ).fetchone()
+        if taken:
+            continue
+        valid.append(row)
+
+    if not valid:
+        conn.close()
+        return None, None, "Aucun exemplaire facturable sélectionné."
+
+    year = (inv_date or "")[:4] or "0000"
+    existing = conn.execute(
+        "SELECT number FROM invoices WHERE number LIKE ?", (f"{year}-%",)
+    ).fetchall()
+    max_seq = 0
+    for r in existing:
+        try:
+            max_seq = max(max_seq, int(r["number"].split("-")[1]))
+        except (ValueError, IndexError):
+            pass
+    number = f"{year}-{max_seq + 1:03d}"
+
+    with conn:
+        cur = conn.execute(
+            """INSERT INTO invoices
+                   (number, date, customer_name, customer_address, note)
+               VALUES (?, ?, ?, ?, ?)""",
+            (number, inv_date, customer_name, customer_address, note),
+        )
+        invoice_id = cur.lastrowid
+        for row in valid:
+            conn.execute(
+                """INSERT INTO invoice_items
+                       (invoice_id, copy_id, designation, edition_no, unit_price)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (invoice_id, row["id"],
+                 f"{row['title']} — {row['size']}",
+                 f"{row['edition_number']}/{row['edition_size']}",
+                 row["sale_price"] or 0),
+            )
+    conn.close()
+    return invoice_id, number, None
+
+
+def get_invoice(invoice_id):
+    """One invoice with its lines (key 'lines') and computed total."""
+    conn = get_connection()
+    inv = conn.execute(
+        "SELECT * FROM invoices WHERE id = ?", (invoice_id,)
+    ).fetchone()
+    if inv is None:
+        conn.close()
+        return None
+    items = conn.execute(
+        "SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY id",
+        (invoice_id,),
+    ).fetchall()
+    conn.close()
+    data = dict(inv)
+    data["lines"] = items
+    data["total"] = sum(it["unit_price"] for it in items)
+    return data
+
+
+def list_invoices():
+    """All invoices, newest first, with line count and total."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT inv.*, COUNT(it.id) AS line_count,
+                  COALESCE(SUM(it.unit_price), 0) AS total
+           FROM invoices inv
+           LEFT JOIN invoice_items it ON it.invoice_id = inv.id
+           GROUP BY inv.id
+           ORDER BY inv.date DESC, inv.number DESC"""
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+# --------------------------------------------------------------------------
 # Print runs (Phase B): batch printing across editions, with a session cost
 # --------------------------------------------------------------------------
 
