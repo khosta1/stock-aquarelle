@@ -239,6 +239,11 @@ ul.stats li strong { font-size: 1.35rem; }
 .invoice-table th:nth-child(n+3), .invoice-table td:nth-child(n+3) { text-align: right; }
 .invoice-total td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--ink); }
 .invoice-vat { font-style: italic; }
+.invoice-bank { margin-top: 1rem; }
+.bank-table { border-collapse: collapse; margin-top: 0.3rem; }
+.bank-table td { padding: 0.15rem 0.6rem 0.15rem 0; font-size: 0.9rem; }
+.bank-table td:first-child { color: var(--muted); white-space: nowrap; }
+.form-subhead { margin: 1.1rem 0 0.25rem; font-size: 1rem; }
 
 @media print {
   .invoice.card { border: none; padding: 0; }

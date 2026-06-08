@@ -34,9 +34,29 @@
       <label>Mention TVA
         <input type="text" name="vat_mention" value="{{ billing.vat_mention or '' }}">
       </label>
-      <label>Pied de page (conditions, IBAN…)
+
+      <h3 class="form-subhead">Coordonnées bancaires</h3>
+      <p class="muted">Affichées sur la facture pour le règlement par virement.</p>
+      <label>Nom de la banque
+        <input type="text" name="bank_name" value="{{ billing.bank_name or '' }}"
+               placeholder="ex. Crédit Agricole">
+      </label>
+      <label>RIB
+        <input type="text" name="bank_rib" value="{{ billing.bank_rib or '' }}"
+               placeholder="ex. 12345 67890 12345678901 12">
+      </label>
+      <label>IBAN
+        <input type="text" name="bank_iban" value="{{ billing.bank_iban or '' }}"
+               placeholder="ex. FR76 1234 5678 9012 3456 7890 123">
+      </label>
+      <label>BIC
+        <input type="text" name="bank_bic" value="{{ billing.bank_bic or '' }}"
+               placeholder="ex. AGRIFRPPXXX">
+      </label>
+
+      <label>Pied de page (conditions de règlement…)
         <textarea name="invoice_footer" rows="2"
-                  placeholder="ex. Paiement à réception. IBAN : FR76 …">{{ billing.invoice_footer or '' }}</textarea>
+                  placeholder="ex. Paiement à réception sous 30 jours.">{{ billing.invoice_footer or '' }}</textarea>
       </label>
       <div class="form-actions">
         <button type="submit" class="btn">Enregistrer les informations</button>

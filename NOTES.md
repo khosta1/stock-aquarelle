@@ -27,9 +27,9 @@ pas WATERCOLOR_NO_LOGIN).
 
 ## Mettre à jour le code (après avoir modifié quelque chose)
 
-    git -C 'G:\Drawing\aquarelle\WIP_app\Watercolor_app' add .
-    git -C 'G:\Drawing\aquarelle\WIP_app\Watercolor_app' commit -m "ce que j'ai changé"
-    git -C 'G:\Drawing\aquarelle\WIP_app\Watercolor_app' push
+    git -C 'H:\Code\Watercolor_app' add .
+    git -C 'H:\Code\Watercolor_app' commit -m "ce que j'ai changé"
+    git -C 'H:\Code\Watercolor_app' push
 
 Puis, sur PythonAnywhere (console Bash) :
 

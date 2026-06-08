@@ -588,7 +588,9 @@ def export_backup():
 # ---- Global parameters (settings) ----------------------------------------
 
 BILLING_KEYS = ["seller_name", "seller_address", "seller_siret",
-                "seller_status", "vat_mention", "invoice_footer"]
+                "seller_status", "vat_mention",
+                "bank_name", "bank_rib", "bank_iban", "bank_bic",
+                "invoice_footer"]
 DEFAULT_VAT_MENTION = "TVA non applicable, art. 293 B du CGI"
 
 

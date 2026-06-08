@@ -52,6 +52,19 @@
     </table>
 
     <p class="invoice-vat">{{ billing.vat_mention }}</p>
+
+    {% if billing.bank_name or billing.bank_iban or billing.bank_rib or billing.bank_bic %}
+      <div class="invoice-bank">
+        <strong>Règlement par virement</strong>
+        <table class="bank-table">
+          {% if billing.bank_name %}<tr><td>Banque</td><td>{{ billing.bank_name }}</td></tr>{% endif %}
+          {% if billing.bank_rib %}<tr><td>RIB</td><td>{{ billing.bank_rib }}</td></tr>{% endif %}
+          {% if billing.bank_iban %}<tr><td>IBAN</td><td>{{ billing.bank_iban }}</td></tr>{% endif %}
+          {% if billing.bank_bic %}<tr><td>BIC</td><td>{{ billing.bank_bic }}</td></tr>{% endif %}
+        </table>
+      </div>
+    {% endif %}
+
     {% if invoice.note %}<p>{{ invoice.note }}</p>{% endif %}
     {% if billing.invoice_footer %}
       <p class="invoice-footer pre muted">{{ billing.invoice_footer }}</p>
