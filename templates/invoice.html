@@ -61,8 +61,8 @@
         <tr><td>Commission vendeur</td>
             <td>{{ '%g'|format(invoice.commission_pct) }} %</td></tr>
         <tr><td>Montant vendeur</td>
-            <td class="amount-neg">− {{ '%.2f'|format(invoice.commission_amount) }} €</td></tr>
-        <tr class="split-net"><td>Net qui me revient</td>
+            <td>{{ '%.2f'|format(invoice.commission_amount) }} €</td></tr>
+        <tr class="split-net"><td>Total à payer</td>
             <td class="amount-pos">{{ '%.2f'|format(invoice.net_amount) }} €</td></tr>
       </table>
       <form method="post" class="form-inline no-print" style="margin-top: 0.6rem;"
