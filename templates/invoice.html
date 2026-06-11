@@ -53,6 +53,28 @@
 
     <p class="invoice-vat">{{ billing.vat_mention }}</p>
 
+    <div class="invoice-split">
+      <h3>Répartition</h3>
+      <table class="split-table">
+        <tr><td>Total</td>
+            <td>{{ '%.2f'|format(invoice.total) }} €</td></tr>
+        <tr><td>Commission vendeur</td>
+            <td>{{ '%g'|format(invoice.commission_pct) }} %</td></tr>
+        <tr><td>Montant vendeur</td>
+            <td class="amount-neg">− {{ '%.2f'|format(invoice.commission_amount) }} €</td></tr>
+        <tr class="split-net"><td>Net qui me revient</td>
+            <td class="amount-pos">{{ '%.2f'|format(invoice.net_amount) }} €</td></tr>
+      </table>
+      <form method="post" class="form-inline no-print" style="margin-top: 0.6rem;"
+            action="{{ url_for('update_invoice_commission', invoice_id=invoice.id) }}">
+        <label>Modifier le % vendeur
+          <input type="number" name="commission_pct" step="0.1" min="0" max="100"
+                 value="{{ '%g'|format(invoice.commission_pct) }}">
+        </label>
+        <button type="submit" class="btn btn-small">Recalculer</button>
+      </form>
+    </div>
+
     {% if billing.bank_name or billing.bank_iban or billing.bank_rib or billing.bank_bic %}
       <div class="invoice-bank">
         <strong>Règlement par virement</strong>

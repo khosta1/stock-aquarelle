@@ -629,6 +629,11 @@ def new_invoice():
         customer_name = request.form.get("customer_name", "").strip()
         customer_address = request.form.get("customer_address", "").strip()
         note = request.form.get("note", "").strip() or None
+        try:
+            commission_pct = float(request.form.get("commission_pct", "") or 45)
+        except ValueError:
+            commission_pct = 45
+        commission_pct = min(max(commission_pct, 0), 100)
         copy_ids = []
         for cid in request.form.getlist("copy_ids"):
             try:
@@ -642,7 +647,8 @@ def new_invoice():
             flash("Sélectionnez au moins un exemplaire à facturer.", "error")
         else:
             invoice_id, number, error = database.create_invoice(
-                inv_date, customer_name, customer_address, note, copy_ids)
+                inv_date, customer_name, customer_address, note, copy_ids,
+                commission_pct=commission_pct)
             if error:
                 flash(error, "error")
             else:
@@ -666,6 +672,32 @@ def view_invoice(invoice_id):
     billing = database.get_settings()
     billing.setdefault("vat_mention", DEFAULT_VAT_MENTION)
     return render_template("invoice.html", invoice=invoice, billing=billing)
+
+
+@app.route("/factures/<int:invoice_id>/commission", methods=["POST"])
+def update_invoice_commission(invoice_id):
+    if database.get_invoice(invoice_id) is None:
+        flash("Facture introuvable.", "error")
+        return redirect(url_for("invoices"))
+    try:
+        pct = float(request.form.get("commission_pct", "") or 0)
+    except ValueError:
+        flash("Le pourcentage doit être un nombre.", "error")
+        return redirect(url_for("view_invoice", invoice_id=invoice_id))
+    database.update_invoice_commission(invoice_id, min(max(pct, 0), 100))
+    flash("Commission mise à jour.", "success")
+    return redirect(url_for("view_invoice", invoice_id=invoice_id))
+
+
+@app.route("/factures/<int:invoice_id>/supprimer", methods=["POST"])
+def delete_invoice(invoice_id):
+    if database.get_invoice(invoice_id) is None:
+        flash("Facture introuvable.", "error")
+        return redirect(url_for("invoices"))
+    database.delete_invoice(invoice_id)
+    flash("Facture supprimée — ses exemplaires sont de nouveau facturables.",
+          "success")
+    return redirect(url_for("invoices"))
 
 
 @app.route("/parametres/papiers/ajouter", methods=["POST"])

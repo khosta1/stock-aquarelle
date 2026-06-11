@@ -239,6 +239,12 @@ ul.stats li strong { font-size: 1.35rem; }
 .invoice-table th:nth-child(n+3), .invoice-table td:nth-child(n+3) { text-align: right; }
 .invoice-total td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--ink); }
 .invoice-vat { font-style: italic; }
+.invoice-split { margin-top: 1.25rem; }
+.invoice-split h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.split-table { border-collapse: collapse; min-width: 280px; max-width: 360px; width: 100%; }
+.split-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line); }
+.split-table td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.split-table tr.split-net td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--ink); border-bottom: none; }
 .invoice-bank { margin-top: 1rem; }
 .bank-table { border-collapse: collapse; margin-top: 0.3rem; }
 .bank-table td { padding: 0.15rem 0.6rem 0.15rem 0; font-size: 0.9rem; }

@@ -22,6 +22,10 @@
         <label>Note (facultatif)
           <input type="text" name="note" value="{{ form.note or '' }}">
         </label>
+        <label>Commission vendeur (%)
+          <input type="number" name="commission_pct" step="0.1" min="0" max="100"
+                 value="{{ form.commission_pct or '45' }}">
+        </label>
       </div>
     </section>
 

@@ -23,7 +23,14 @@
               <td>{{ inv.customer_name }}</td>
               <td>{{ inv.line_count }}</td>
               <td>{{ '%.2f'|format(inv.total) }}</td>
-              <td><a href="{{ url_for('view_invoice', invoice_id=inv.id) }}">Voir →</a></td>
+              <td class="right">
+                <a href="{{ url_for('view_invoice', invoice_id=inv.id) }}">Voir →</a>
+                <form method="post" style="display:inline"
+                      action="{{ url_for('delete_invoice', invoice_id=inv.id) }}"
+                      onsubmit="return confirm('Supprimer la facture {{ inv.number }} ? Ses exemplaires redeviendront facturables.');">
+                  <button type="submit" class="btn btn-small btn-ghost">Supprimer</button>
+                </form>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

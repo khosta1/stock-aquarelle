@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     customer_name    TEXT,
     customer_address TEXT,
     note             TEXT,
+    commission_pct   REAL NOT NULL DEFAULT 45,
     created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

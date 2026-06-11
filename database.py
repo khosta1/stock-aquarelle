@@ -30,10 +30,20 @@ def get_connection():
 
 
 def init_db():
-    """Create tables if they don't exist yet. Safe to call on every start."""
+    """Create tables if needed, then apply small migrations. Safe every start."""
     with get_connection() as conn:
         with open(SCHEMA_PATH, encoding="utf-8") as f:
             conn.executescript(f.read())
+        _migrate(conn)
+
+
+def _migrate(conn):
+    """Idempotent migrations for columns added after first release."""
+    invoice_cols = [r["name"] for r in conn.execute("PRAGMA table_info(invoices)")]
+    if invoice_cols and "commission_pct" not in invoice_cols:
+        conn.execute(
+            "ALTER TABLE invoices ADD COLUMN commission_pct REAL NOT NULL DEFAULT 45"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -651,7 +661,8 @@ def uninvoiced_sold_copies():
     return rows
 
 
-def create_invoice(inv_date, customer_name, customer_address, note, copy_ids):
+def create_invoice(inv_date, customer_name, customer_address, note, copy_ids,
+                   commission_pct=45):
     """Create an invoice from selected sold copies. Returns (id, number, error).
 
     Skips copies that aren't sold or are already invoiced. Lines snapshot the
@@ -696,9 +707,11 @@ def create_invoice(inv_date, customer_name, customer_address, note, copy_ids):
     with conn:
         cur = conn.execute(
             """INSERT INTO invoices
-                   (number, date, customer_name, customer_address, note)
-               VALUES (?, ?, ?, ?, ?)""",
-            (number, inv_date, customer_name, customer_address, note),
+                   (number, date, customer_name, customer_address, note,
+                    commission_pct)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (number, inv_date, customer_name, customer_address, note,
+             commission_pct),
         )
         invoice_id = cur.lastrowid
         for row in valid:
@@ -732,7 +745,28 @@ def get_invoice(invoice_id):
     data = dict(inv)
     data["lines"] = items
     data["total"] = sum(it["unit_price"] for it in items)
+    pct = data.get("commission_pct") or 0
+    data["commission_amount"] = data["total"] * pct / 100
+    data["net_amount"] = data["total"] - data["commission_amount"]
     return data
+
+
+def update_invoice_commission(invoice_id, commission_pct):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE invoices SET commission_pct = ? WHERE id = ?",
+            (commission_pct, invoice_id),
+        )
+    conn.close()
+
+
+def delete_invoice(invoice_id):
+    """Delete an invoice; its lines cascade, freeing the copies to be re-invoiced."""
+    conn = get_connection()
+    with conn:
+        conn.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
+    conn.close()
 
 
 def list_invoices():
