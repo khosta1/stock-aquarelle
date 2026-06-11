@@ -234,8 +234,9 @@ ul.stats li strong { font-size: 1.35rem; }
 .invoice-meta { text-align: right; }
 .invoice-meta h1 { margin: 0 0 0.3rem; }
 .invoice-client { margin-bottom: 1.5rem; }
-.invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-.invoice-table th, .invoice-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
+.invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; border: 2px solid var(--ink); }
+.invoice-table th, .invoice-table td { padding: 0.5rem 0.6rem; border: 1px solid var(--line); text-align: left; }
+.invoice-table thead th { background: #f4f1ee; border-bottom: 2px solid var(--ink); }
 .invoice-table th:nth-child(n+3), .invoice-table td:nth-child(n+3) { text-align: right; }
 .invoice-total td { font-weight: 700; font-size: 1.1rem; border-top: 2px solid var(--ink); }
 .invoice-vat { font-style: italic; }
