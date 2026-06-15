@@ -863,17 +863,27 @@ def copies_at_exhibitor(exhibitor_id):
 
 
 def available_copies_for_exposition():
-    """In-stock copies that can be placed on show (printed, not sold, not on show)."""
+    """In-stock copies that can be placed on show, grouped by artwork.
+
+    Returns a list of {artwork_id, title, image_path, copies:[...]} ordered by
+    title — for a compact list with one collapsible dropdown per artwork.
+    """
     conn = get_connection()
     rows = conn.execute(
-        """SELECT c.id, c.edition_number, v.size, v.edition_size, a.title AS artwork
+        """SELECT c.id, c.edition_number, v.size, v.edition_size,
+                  a.id AS artwork_id, a.title AS artwork, a.image_path
            FROM copies c
            JOIN variants v ON v.id = c.variant_id
            JOIN artworks a ON a.id = v.artwork_id
            WHERE c.status = 'printed' AND c.exhibitor_id IS NULL
            ORDER BY a.title, v.size, c.edition_number""").fetchall()
     conn.close()
-    return rows
+    groups = {}
+    for r in rows:
+        g = groups.setdefault(r["artwork_id"], {
+            "title": r["artwork"], "image_path": r["image_path"], "copies": []})
+        g["copies"].append(r)
+    return list(groups.values())
 
 
 def place_in_exposition(exhibitor_id, copy_ids):

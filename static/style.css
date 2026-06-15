@@ -278,6 +278,20 @@ ul.stats li strong { font-size: 1.35rem; }
 .expo-num { color: #c47d1a; font-weight: 600; }
 .mini-input { width: 7rem; padding: 0.35rem; border: 1px solid var(--line); border-radius: 6px; font-size: 1rem; }
 
+/* Exposition picker (collapsible list per artwork) */
+.expo-search { width: 100%; max-width: 360px; padding: 0.5rem; border: 1px solid var(--line); border-radius: 7px; font-size: 1rem; margin-bottom: 0.75rem; }
+.expo-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.expo-item { border-bottom: 1px solid var(--line); }
+.expo-item:last-child { border-bottom: none; }
+.expo-item > summary { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.7rem; cursor: pointer; list-style: none; }
+.expo-item > summary::-webkit-details-marker { display: none; }
+.expo-item > summary::before { content: "\25B8"; color: var(--muted); display: inline-block; transition: transform .15s ease; }
+.expo-item[open] > summary::before { transform: rotate(90deg); }
+.expo-name { font-weight: 600; }
+.thumb-empty { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 6px; background: #faf8f5; }
+.expo-copies { padding: 0.25rem 0.7rem 0.7rem 2.2rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.3rem; background: #fcfbf9; }
+.expo-copy { display: flex; align-items: center; gap: 0.4rem; font-size: 0.92rem; }
+
 /* Login */
 .login-wrap { max-width: 380px; margin: 3rem auto 0; }
 .login-wrap h1 { margin-top: 0; font-size: 1.4rem; }

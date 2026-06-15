@@ -67,25 +67,50 @@
     {% if not available %}
       <p class="muted">Aucun exemplaire en stock disponible à exposer.</p>
     {% else %}
-      <p class="muted">Cochez les exemplaires (en stock) à déposer chez cet exposant.</p>
+      <p class="muted">Ouvre une œuvre, coche les exemplaires à déposer, puis valide.</p>
+      <input type="text" id="expo-search" class="expo-search"
+             placeholder="Rechercher une œuvre…">
       <form method="post" action="{{ url_for('place_exposition', exhibitor_id=exhibitor.id) }}">
-        <table class="stock">
-          <thead><tr><th></th><th>Œuvre</th><th>Format</th><th>N°</th></tr></thead>
-          <tbody>
-            {% for c in available %}
-              <tr>
-                <td><input type="checkbox" name="copy_ids" value="{{ c.id }}"></td>
-                <td>{{ c.artwork }}</td>
-                <td>{{ c.size }}</td>
-                <td>n°{{ c.edition_number }}/{{ c.edition_size }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="expo-list">
+          {% for g in available %}
+            <details class="expo-item" data-name="{{ g.title | lower }}">
+              <summary>
+                {% if g.image_path %}
+                  <img class="thumb" alt=""
+                       src="{{ url_for('static', filename='images/' + g.image_path) }}">
+                {% else %}
+                  <span class="thumb thumb-empty">🖼️</span>
+                {% endif %}
+                <span class="expo-name">{{ g.title }}</span>
+                <span class="muted">— {{ g.copies | length }} dispo</span>
+              </summary>
+              <div class="expo-copies">
+                {% for c in g.copies %}
+                  <label class="expo-copy">
+                    <input type="checkbox" name="copy_ids" value="{{ c.id }}">
+                    {{ c.size }} — n°{{ c.edition_number }}/{{ c.edition_size }}
+                  </label>
+                {% endfor %}
+              </div>
+            </details>
+          {% endfor %}
+        </div>
         <div class="form-actions" style="margin-top: 1rem;">
           <button type="submit" class="btn">Mettre en exposition</button>
         </div>
       </form>
+      <script>
+        (function () {
+          var box = document.getElementById('expo-search');
+          if (!box) return;
+          box.addEventListener('input', function () {
+            var q = this.value.toLowerCase();
+            document.querySelectorAll('.expo-list .expo-item').forEach(function (el) {
+              el.style.display = el.dataset.name.indexOf(q) !== -1 ? '' : 'none';
+            });
+          });
+        })();
+      </script>
     {% endif %}
   </section>
 {% endblock %}
