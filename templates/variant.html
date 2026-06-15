@@ -15,6 +15,7 @@
   <ul class="stats">
     <li><span>Imprimés</span><strong>{{ variant.printed }}</strong></li>
     <li><span>Vendus</span><strong>{{ variant.sold }}</strong></li>
+    <li><span>En expo</span><strong>{{ variant.en_exposition }}</strong></li>
     <li><span>En stock</span><strong>{{ variant.in_stock }}</strong></li>
     <li><span>Édition restante</span><strong>{{ variant.remaining }}</strong></li>
     <li><span>Recettes</span><strong>{{ '%.2f'|format(variant.revenue) }}</strong></li>
@@ -48,7 +49,7 @@
     {% else %}
       <div class="copies-grid">
         {% for c in copies %}
-          <div class="copy copy-{{ c.status }}">
+          <div class="copy copy-{{ 'exposition' if (c.exhibitor_id and c.status == 'printed') else c.status }}">
             <div class="copy-no">n°{{ c.edition_number }}/{{ variant.edition_size }}</div>
             {% if c.status == 'sold' %}
               <div class="copy-tag">VENDU</div>
@@ -63,6 +64,15 @@
                     action="{{ url_for('unsell_copy', copy_id=c.id) }}"
                     onsubmit="return confirm('Annuler la vente et remettre cet exemplaire en stock ?');">
                 <button type="submit" class="btn btn-small btn-ghost">Annuler la vente</button>
+              </form>
+            {% elif c.exhibitor_id %}
+              <div class="copy-tag tag-expo">EN EXPOSITION</div>
+              <div class="copy-meta">chez
+                <a href="{{ url_for('exhibitor_detail', exhibitor_id=c.exhibitor_id) }}">{{ c.exhibitor_name }}</a>
+              </div>
+              <form method="post"
+                    action="{{ url_for('return_exposition', exhibitor_id=c.exhibitor_id, copy_id=c.id) }}">
+                <button type="submit" class="btn btn-small btn-ghost">Retour stock</button>
               </form>
             {% else %}
               <div class="copy-tag">en stock</div>

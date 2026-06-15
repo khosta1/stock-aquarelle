@@ -14,6 +14,7 @@
     <li><span>Œuvres</span><strong>{{ summary.artworks }}</strong></li>
     <li><span>Éditions</span><strong>{{ summary.variants }}</strong></li>
     <li><span>En stock</span><strong>{{ summary.in_stock }}</strong></li>
+    <li><span>En exposition</span><strong>{{ summary.en_exposition }}</strong></li>
     <li><span>Valeur du stock</span><strong>{{ '%.2f'|format(summary.stock_value) }}</strong></li>
     <li><span>Ventes ce mois</span>
       <strong>{{ summary.month_sold }} · {{ '%.2f'|format(summary.month_revenue) }}</strong></li>
@@ -69,7 +70,7 @@
           <thead>
             <tr>
               <th>Format</th><th>Papier</th><th>Prix</th>
-              <th>Imprimés</th><th>Vendus</th><th>En stock</th>
+              <th>Imprimés</th><th>Vendus</th><th>En expo</th><th>En stock</th>
               <th>Édition restante</th><th>Recettes</th><th></th>
             </tr>
           </thead>
@@ -81,6 +82,7 @@
                 <td>{{ '%.2f'|format(v.price) }}</td>
                 <td>{{ v.printed }}</td>
                 <td>{{ v.sold }}</td>
+                <td class="{{ 'expo-num' if v.en_exposition }}">{{ v.en_exposition }}</td>
                 <td><strong>{{ v.in_stock }}</strong></td>
                 <td>{{ v.remaining }} / {{ v.edition_size }}</td>
                 <td>{{ '%.2f'|format(v.revenue) }}</td>

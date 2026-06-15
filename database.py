@@ -44,6 +44,9 @@ def _migrate(conn):
         conn.execute(
             "ALTER TABLE invoices ADD COLUMN commission_pct REAL NOT NULL DEFAULT 45"
         )
+    copy_cols = [r["name"] for r in conn.execute("PRAGMA table_info(copies)")]
+    if copy_cols and "exhibitor_id" not in copy_cols:
+        conn.execute("ALTER TABLE copies ADD COLUMN exhibitor_id INTEGER")
 
 
 # --------------------------------------------------------------------------
@@ -53,7 +56,8 @@ def _migrate(conn):
 def _decorate_variant(row):
     """Add computed stock numbers to a variant row from the query below."""
     v = dict(row)
-    v["in_stock"] = v["printed"] - v["sold"]
+    # in_stock = truly available = printed, not sold, not on exhibition
+    v["in_stock"] = v["printed"] - v["sold"] - v["en_exposition"]
     v["remaining"] = v["edition_size"] - v["printed"]
     v["sold_out"] = v["remaining"] <= 0
     return v
@@ -63,6 +67,9 @@ _VARIANT_STATS_SQL = """
     SELECT v.*,
            COUNT(c.id)                                              AS printed,
            COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0) AS sold,
+           COALESCE(SUM(CASE WHEN c.status = 'printed'
+                             AND c.exhibitor_id IS NOT NULL
+                             THEN 1 END), 0)                        AS en_exposition,
            COALESCE(SUM(CASE WHEN c.status = 'sold'
                              THEN c.sale_price END), 0)             AS revenue
     FROM variants v
@@ -148,7 +155,10 @@ def get_variant(variant_id):
 def copies_for_variant(variant_id):
     conn = get_connection()
     rows = conn.execute(
-        "SELECT * FROM copies WHERE variant_id = ? ORDER BY edition_number",
+        """SELECT c.*, e.name AS exhibitor_name
+           FROM copies c
+           LEFT JOIN exhibitors e ON e.id = c.exhibitor_id
+           WHERE c.variant_id = ? ORDER BY c.edition_number""",
         (variant_id,),
     ).fetchall()
     conn.close()
@@ -769,6 +779,128 @@ def delete_invoice(invoice_id):
     conn.close()
 
 
+# --------------------------------------------------------------------------
+# Exhibitors (dépôt-vente / exposition)
+# --------------------------------------------------------------------------
+
+def list_exhibitors():
+    """All exhibitors with how many copies are currently on show at each."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT e.*, COUNT(c.id) AS on_show
+           FROM exhibitors e
+           LEFT JOIN copies c
+                  ON c.exhibitor_id = e.id AND c.status = 'printed'
+           GROUP BY e.id ORDER BY e.name"""
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_exhibitor(exhibitor_id):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM exhibitors WHERE id = ?", (exhibitor_id,)
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def add_exhibitor(name, kind, location, phone, email, note):
+    conn = get_connection()
+    with conn:
+        cur = conn.execute(
+            """INSERT INTO exhibitors (name, kind, location, phone, email, note)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, kind, location, phone, email, note),
+        )
+    conn.close()
+    return cur.lastrowid
+
+
+def update_exhibitor(exhibitor_id, name, kind, location, phone, email, note):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """UPDATE exhibitors
+               SET name = ?, kind = ?, location = ?, phone = ?, email = ?, note = ?
+               WHERE id = ?""",
+            (name, kind, location, phone, email, note, exhibitor_id),
+        )
+    conn.close()
+
+
+def delete_exhibitor(exhibitor_id):
+    """Delete an exhibitor; its on-show copies go back to stock. Returns how many."""
+    conn = get_connection()
+    returned = conn.execute(
+        "SELECT COUNT(*) AS c FROM copies "
+        "WHERE exhibitor_id = ? AND status = 'printed'", (exhibitor_id,)
+    ).fetchone()["c"]
+    with conn:
+        conn.execute(
+            "UPDATE copies SET exhibitor_id = NULL WHERE exhibitor_id = ?",
+            (exhibitor_id,))
+        conn.execute("DELETE FROM exhibitors WHERE id = ?", (exhibitor_id,))
+    conn.close()
+    return returned
+
+
+def copies_at_exhibitor(exhibitor_id):
+    """Copies currently on show at this exhibitor (its current stock)."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT c.id, c.edition_number, v.id AS variant_id, v.size,
+                  v.edition_size, v.price, a.title AS artwork
+           FROM copies c
+           JOIN variants v ON v.id = c.variant_id
+           JOIN artworks a ON a.id = v.artwork_id
+           WHERE c.exhibitor_id = ? AND c.status = 'printed'
+           ORDER BY a.title, v.size, c.edition_number""",
+        (exhibitor_id,)).fetchall()
+    conn.close()
+    return rows
+
+
+def available_copies_for_exposition():
+    """In-stock copies that can be placed on show (printed, not sold, not on show)."""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT c.id, c.edition_number, v.size, v.edition_size, a.title AS artwork
+           FROM copies c
+           JOIN variants v ON v.id = c.variant_id
+           JOIN artworks a ON a.id = v.artwork_id
+           WHERE c.status = 'printed' AND c.exhibitor_id IS NULL
+           ORDER BY a.title, v.size, c.edition_number""").fetchall()
+    conn.close()
+    return rows
+
+
+def place_in_exposition(exhibitor_id, copy_ids):
+    """Put selected in-stock copies on show at an exhibitor. Returns count placed."""
+    conn = get_connection()
+    placed = 0
+    with conn:
+        for cid in copy_ids:
+            cur = conn.execute(
+                """UPDATE copies SET exhibitor_id = ?
+                   WHERE id = ? AND status = 'printed' AND exhibitor_id IS NULL""",
+                (exhibitor_id, cid))
+            placed += cur.rowcount
+    conn.close()
+    return placed
+
+
+def return_from_exposition(copy_id):
+    """Bring a copy back from show into stock."""
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE copies SET exhibitor_id = NULL "
+            "WHERE id = ? AND status = 'printed'", (copy_id,))
+    conn.close()
+
+
 def list_invoices():
     """All invoices, newest first, with line count and total."""
     conn = get_connection()
@@ -931,6 +1063,7 @@ def create_sale_batch(sold_date, channel, items):
             copies = conn.execute(
                 """SELECT id FROM copies
                    WHERE variant_id = ? AND status = 'printed'
+                     AND exhibitor_id IS NULL
                    ORDER BY edition_number LIMIT ?""",
                 (variant_id, quantity)
             ).fetchall()
@@ -1018,12 +1151,17 @@ def dashboard_summary():
     artworks = conn.execute("SELECT COUNT(*) AS c FROM artworks").fetchone()["c"]
     variants = conn.execute("SELECT COUNT(*) AS c FROM variants").fetchone()["c"]
     in_stock = conn.execute(
-        "SELECT COUNT(*) AS c FROM copies WHERE status = 'printed'"
+        "SELECT COUNT(*) AS c FROM copies "
+        "WHERE status = 'printed' AND exhibitor_id IS NULL"
+    ).fetchone()["c"]
+    en_exposition = conn.execute(
+        "SELECT COUNT(*) AS c FROM copies "
+        "WHERE status = 'printed' AND exhibitor_id IS NOT NULL"
     ).fetchone()["c"]
     stock_value = conn.execute(
         """SELECT COALESCE(SUM(v.price), 0) AS t
            FROM copies c JOIN variants v ON v.id = c.variant_id
-           WHERE c.status = 'printed'"""
+           WHERE c.status = 'printed' AND c.exhibitor_id IS NULL"""
     ).fetchone()["t"]
     month = conn.execute(
         """SELECT COUNT(*) AS c, COALESCE(SUM(sale_price), 0) AS r
@@ -1034,7 +1172,7 @@ def dashboard_summary():
     conn.close()
     return {
         "artworks": artworks, "variants": variants, "in_stock": in_stock,
-        "stock_value": stock_value,
+        "en_exposition": en_exposition, "stock_value": stock_value,
         "month_sold": month["c"], "month_revenue": month["r"],
     }
 
@@ -1046,16 +1184,25 @@ def low_stock_variants(threshold):
     rows = conn.execute(
         """SELECT v.id, v.size, v.paper, v.edition_size, a.title AS artwork_title,
                   COUNT(c.id) AS printed,
-                  COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0) AS sold
+                  COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0) AS sold,
+                  COALESCE(SUM(CASE WHEN c.status = 'printed'
+                                    AND c.exhibitor_id IS NOT NULL
+                                    THEN 1 END), 0) AS en_exposition
            FROM variants v
            JOIN artworks a ON a.id = v.artwork_id
            LEFT JOIN copies c ON c.variant_id = v.id
            GROUP BY v.id
            HAVING (COUNT(c.id)
-                   - COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0)) <= ?
+                   - COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0)
+                   - COALESCE(SUM(CASE WHEN c.status = 'printed'
+                                       AND c.exhibitor_id IS NOT NULL
+                                       THEN 1 END), 0)) <= ?
               AND (v.edition_size - COUNT(c.id)) > 0
            ORDER BY (COUNT(c.id)
-                     - COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0)) ASC,
+                     - COALESCE(SUM(CASE WHEN c.status = 'sold' THEN 1 END), 0)
+                     - COALESCE(SUM(CASE WHEN c.status = 'printed'
+                                         AND c.exhibitor_id IS NOT NULL
+                                         THEN 1 END), 0)) ASC,
                     a.title""",
         (threshold,),
     ).fetchall()
@@ -1063,7 +1210,7 @@ def low_stock_variants(threshold):
     result = []
     for r in rows:
         d = dict(r)
-        d["in_stock"] = d["printed"] - d["sold"]
+        d["in_stock"] = d["printed"] - d["sold"] - d["en_exposition"]
         d["remaining"] = d["edition_size"] - d["printed"]
         result.append(d)
     return result

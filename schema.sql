@@ -37,9 +37,23 @@ CREATE TABLE IF NOT EXISTS copies (
     sale_price      REAL,
     customer        TEXT,
     channel         TEXT,
+    -- when set (and status='printed'), the copy is "en exposition" at an exhibitor
+    exhibitor_id    INTEGER,
     FOREIGN KEY (variant_id) REFERENCES variants (id) ON DELETE CASCADE,
     -- no two copies of the same variant can share an edition number
     UNIQUE (variant_id, edition_number)
+);
+
+-- Exhibitors (dépôt-vente): bars, galleries, shops holding copies on display.
+CREATE TABLE IF NOT EXISTS exhibitors (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    kind       TEXT,
+    location   TEXT,
+    phone      TEXT,
+    email      TEXT,
+    note       TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ==========================================================================

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Exposants — Stock Aquarelle{% endblock %}
+{% block content %}
+  <div class="page-head"><h1>Exposants</h1></div>
+  <p class="muted">Bars, galeries, magasins qui exposent vos tableaux (dépôt-vente).</p>
+
+  <section class="card">
+    <h2>Nouvel exposant</h2>
+    <form method="post" action="{{ url_for('add_exhibitor') }}" class="form">
+      <label>Nom * <input type="text" name="name" required></label>
+      <label>Type <input type="text" name="kind" placeholder="bar, galerie, magasin…"></label>
+      <label>Lieu <input type="text" name="location" placeholder="ville / adresse"></label>
+      <label>Téléphone <input type="text" name="phone"></label>
+      <label>Email <input type="text" name="email"></label>
+      <label>Note <input type="text" name="note"></label>
+      <div class="form-actions"><button type="submit" class="btn">Ajouter</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    {% if not exhibitors %}
+      <p class="muted">Aucun exposant pour l'instant.</p>
+    {% else %}
+      <table class="stock">
+        <thead>
+          <tr><th>Nom</th><th>Type</th><th>Lieu</th><th>En exposition</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for e in exhibitors %}
+            <tr>
+              <td>{{ e.name }}</td>
+              <td>{{ e.kind or '—' }}</td>
+              <td>{{ e.location or '—' }}</td>
+              <td><strong>{{ e.on_show }}</strong></td>
+              <td><a href="{{ url_for('exhibitor_detail', exhibitor_id=e.id) }}">Gérer →</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+{% endblock %}

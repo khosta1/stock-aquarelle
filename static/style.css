@@ -273,6 +273,10 @@ ul.stats li strong { font-size: 1.35rem; }
 .copy-meta { font-size: 0.85rem; margin-bottom: 0.2rem; }
 .copy-sold { background: #f4f1ee; }
 .copy-sold .copy-tag { color: var(--bad); font-weight: 700; }
+.copy-exposition { background: #fdf3e6; border-color: #f0c98a; }
+.copy-exposition .copy-tag, .tag-expo { color: #c47d1a; font-weight: 700; }
+.expo-num { color: #c47d1a; font-weight: 600; }
+.mini-input { width: 7rem; padding: 0.35rem; border: 1px solid var(--line); border-radius: 6px; font-size: 1rem; }
 
 /* Login */
 .login-wrap { max-width: 380px; margin: 3rem auto 0; }

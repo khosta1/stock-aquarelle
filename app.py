@@ -700,6 +700,127 @@ def delete_invoice(invoice_id):
     return redirect(url_for("invoices"))
 
 
+# ---- Exhibitors (dépôt-vente / exposition) -------------------------------
+
+@app.route("/exposants")
+def exhibitors():
+    return render_template("exhibitors.html", exhibitors=database.list_exhibitors())
+
+
+@app.route("/exposants/ajouter", methods=["POST"])
+def add_exhibitor():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Indiquez le nom de l'exposant.", "error")
+        return redirect(url_for("exhibitors"))
+    eid = database.add_exhibitor(
+        name,
+        request.form.get("kind", "").strip() or None,
+        request.form.get("location", "").strip() or None,
+        request.form.get("phone", "").strip() or None,
+        request.form.get("email", "").strip() or None,
+        request.form.get("note", "").strip() or None,
+    )
+    flash(f"Exposant « {name} » ajouté.", "success")
+    return redirect(url_for("exhibitor_detail", exhibitor_id=eid))
+
+
+@app.route("/exposants/<int:exhibitor_id>")
+def exhibitor_detail(exhibitor_id):
+    ex = database.get_exhibitor(exhibitor_id)
+    if ex is None:
+        flash("Exposant introuvable.", "error")
+        return redirect(url_for("exhibitors"))
+    return render_template(
+        "exhibitor.html",
+        exhibitor=ex,
+        on_show=database.copies_at_exhibitor(exhibitor_id),
+        available=database.available_copies_for_exposition(),
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/exposants/<int:exhibitor_id>/modifier", methods=["POST"])
+def update_exhibitor(exhibitor_id):
+    if database.get_exhibitor(exhibitor_id) is None:
+        flash("Exposant introuvable.", "error")
+        return redirect(url_for("exhibitors"))
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Le nom est obligatoire.", "error")
+        return redirect(url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+    database.update_exhibitor(
+        exhibitor_id, name,
+        request.form.get("kind", "").strip() or None,
+        request.form.get("location", "").strip() or None,
+        request.form.get("phone", "").strip() or None,
+        request.form.get("email", "").strip() or None,
+        request.form.get("note", "").strip() or None,
+    )
+    flash("Exposant mis à jour.", "success")
+    return redirect(url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+
+
+@app.route("/exposants/<int:exhibitor_id>/supprimer", methods=["POST"])
+def delete_exhibitor(exhibitor_id):
+    if database.get_exhibitor(exhibitor_id) is None:
+        flash("Exposant introuvable.", "error")
+        return redirect(url_for("exhibitors"))
+    returned = database.delete_exhibitor(exhibitor_id)
+    flash(f"Exposant supprimé — {returned} exemplaire(s) remis en stock.", "success")
+    return redirect(url_for("exhibitors"))
+
+
+@app.route("/exposants/<int:exhibitor_id>/exposer", methods=["POST"])
+def place_exposition(exhibitor_id):
+    if database.get_exhibitor(exhibitor_id) is None:
+        flash("Exposant introuvable.", "error")
+        return redirect(url_for("exhibitors"))
+    copy_ids = []
+    for cid in request.form.getlist("copy_ids"):
+        try:
+            copy_ids.append(int(cid))
+        except ValueError:
+            continue
+    if not copy_ids:
+        flash("Sélectionnez au moins un exemplaire à mettre en exposition.", "error")
+        return redirect(url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+    placed = database.place_in_exposition(exhibitor_id, copy_ids)
+    flash(f"{placed} exemplaire(s) mis en exposition.", "success")
+    return redirect(url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+
+
+@app.route("/exposants/<int:exhibitor_id>/retour/<int:copy_id>", methods=["POST"])
+def return_exposition(exhibitor_id, copy_id):
+    database.return_from_exposition(copy_id)
+    flash("Exemplaire remis en stock.", "success")
+    return redirect(request.referrer
+                    or url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+
+
+@app.route("/exposants/<int:exhibitor_id>/vendre/<int:copy_id>", methods=["POST"])
+def sell_from_exhibitor(exhibitor_id, copy_id):
+    ex = database.get_exhibitor(exhibitor_id)
+    copy = database.get_copy(copy_id)
+    if ex is None or copy is None:
+        flash("Introuvable.", "error")
+        return redirect(url_for("exhibitors"))
+    variant = database.get_variant(copy["variant_id"])
+    sold_date = request.form.get("sold_date", "").strip() or date.today().isoformat()
+    price_raw = request.form.get("sale_price", "").strip()
+    customer = request.form.get("customer", "").strip() or None
+    try:
+        sale_price = float(price_raw) if price_raw else variant["price"]
+    except ValueError:
+        flash("Le prix de vente doit être un nombre.", "error")
+        return redirect(url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+    # Sold via the exhibitor -> record the exhibitor as the channel.
+    error = database.sell_copy(copy_id, sold_date, sale_price, customer, ex["name"])
+    flash(error or f"Exemplaire n°{copy['edition_number']} vendu via {ex['name']}.",
+          "error" if error else "success")
+    return redirect(url_for("exhibitor_detail", exhibitor_id=exhibitor_id))
+
+
 @app.route("/parametres/papiers/ajouter", methods=["POST"])
 def add_paper():
     name = request.form.get("name", "").strip()
