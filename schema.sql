@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS artworks (
     title       TEXT    NOT NULL,
     year        INTEGER,
     image_path  TEXT,
+    -- the unique original artwork: sold once (price + date set when sold)
+    original_sale_price REAL,
+    original_sold_date  TEXT,
     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 

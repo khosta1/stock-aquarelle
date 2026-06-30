@@ -180,7 +180,35 @@ def index():
         q=q,
         summary=database.dashboard_summary(),
         low_stock_count=len(database.low_stock_variants(LOW_STOCK_THRESHOLD)),
+        today=date.today().isoformat(),
     )
+
+
+@app.route("/artworks/<int:artwork_id>/vendre-original", methods=["POST"])
+def sell_original(artwork_id):
+    artwork = database.get_artwork(artwork_id)
+    if artwork is None:
+        flash("Œuvre introuvable.", "error")
+        return redirect(url_for("index"))
+    sold_date = request.form.get("date", "").strip() or date.today().isoformat()
+    price_raw = request.form.get("price", "").strip()
+    try:
+        price = float(price_raw) if price_raw else -1
+    except ValueError:
+        price = -1
+    if price < 0:
+        flash("Indiquez un prix de vente valide.", "error")
+    else:
+        database.sell_original(artwork_id, price, sold_date)
+        flash(f"Original de « {artwork['title']} » vendu ({price:.2f}).", "success")
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/artworks/<int:artwork_id>/annuler-original", methods=["POST"])
+def cancel_original_sale(artwork_id):
+    database.cancel_original_sale(artwork_id)
+    flash("Vente de l'original annulée.", "success")
+    return redirect(request.referrer or url_for("index"))
 
 
 @app.route("/catalogue")
@@ -504,6 +532,7 @@ def report():
         expenses_by_category=database.expenses_by_category(start, end),
         best_sellers=database.best_sellers(start, end),
         profit_by_artwork=database.profit_by_artwork(start, end),
+        originals=database.original_sales_list(start, end),
         net=net,
         start=start or "", end=end or "",
         year_start=f"{current_year}-01-01", year_end=f"{current_year}-12-31",

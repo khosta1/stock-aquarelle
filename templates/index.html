@@ -60,10 +60,44 @@
             {{ group.artwork.title }}
           </a>
           {% if group.artwork.year %}<span class="muted">({{ group.artwork.year }})</span>{% endif %}
+          {% if group.artwork.original_sale_price is not none %}
+            <span class="orig-badge"
+                  title="Vendu le {{ group.artwork.original_sold_date | fr_date }}">
+              ● Original vendu · {{ '%.2f'|format(group.artwork.original_sale_price) }} €</span>
+            <form method="post" style="display:inline"
+                  action="{{ url_for('cancel_original_sale', artwork_id=group.artwork.id) }}"
+                  onsubmit="return confirm('Annuler la vente de cet original ?');">
+              <button type="submit" class="orig-cancel" title="Annuler la vente">✕</button>
+            </form>
+          {% else %}
+            <button type="button" class="btn btn-small btn-ghost"
+                    onclick="document.getElementById('orig-{{ group.artwork.id }}').showModal()">
+              Vendre l'original</button>
+          {% endif %}
         </h2>
         <a class="btn btn-small"
            href="{{ url_for('add_variant', artwork_id=group.artwork.id) }}">+ Format</a>
       </div>
+      {% if group.artwork.original_sale_price is none %}
+        <dialog id="orig-{{ group.artwork.id }}" class="orig-dialog">
+          <form method="post" class="form"
+                action="{{ url_for('sell_original', artwork_id=group.artwork.id) }}">
+            <h3>Vendre l'original</h3>
+            <p class="muted">{{ group.artwork.title }}</p>
+            <label>Prix de vente (€)
+              <input type="number" name="price" step="0.01" min="0" required>
+            </label>
+            <label>Date
+              <input type="date" name="date" value="{{ today }}">
+            </label>
+            <div class="form-actions" style="margin-top: 0.75rem;">
+              <button type="submit" class="btn">Valider la vente</button>
+              <button type="button" class="btn btn-ghost"
+                      onclick="document.getElementById('orig-{{ group.artwork.id }}').close()">Annuler</button>
+            </div>
+          </form>
+        </dialog>
+      {% endif %}
 
       {% if group.variants %}
         <table class="stock">

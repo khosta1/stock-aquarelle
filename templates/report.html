@@ -25,6 +25,7 @@
 
   <ul class="stats">
     <li><span>Exemplaires vendus</span><strong>{{ totals.sold }}</strong></li>
+    <li><span>Originaux vendus</span><strong>{{ totals.originals_sold }}</strong></li>
     <li><span>Recettes totales</span><strong>{{ '%.2f'|format(totals.revenue) }}</strong></li>
     <li><span>Bénéfice net</span>
       <strong class="{{ 'amount-pos' if net >= 0 else 'amount-neg' }}">
@@ -57,6 +58,26 @@
         </tr>
       </tbody>
     </table>
+  </section>
+
+  <section class="card">
+    <h2>Œuvres originales vendues</h2>
+    {% if not originals %}
+      <p class="muted">Aucune œuvre originale vendue sur la période.</p>
+    {% else %}
+      <table class="stock">
+        <thead><tr><th>Œuvre</th><th>Date</th><th>Prix</th></tr></thead>
+        <tbody>
+          {% for o in originals %}
+            <tr>
+              <td>{{ o.title }}</td>
+              <td>{{ o.sold_date | fr_date }}</td>
+              <td>{{ '%.2f'|format(o.price) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
   </section>
 
   <section class="card">

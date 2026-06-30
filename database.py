@@ -47,6 +47,10 @@ def _migrate(conn):
     copy_cols = [r["name"] for r in conn.execute("PRAGMA table_info(copies)")]
     if copy_cols and "exhibitor_id" not in copy_cols:
         conn.execute("ALTER TABLE copies ADD COLUMN exhibitor_id INTEGER")
+    art_cols = [r["name"] for r in conn.execute("PRAGMA table_info(artworks)")]
+    if art_cols and "original_sale_price" not in art_cols:
+        conn.execute("ALTER TABLE artworks ADD COLUMN original_sale_price REAL")
+        conn.execute("ALTER TABLE artworks ADD COLUMN original_sold_date TEXT")
 
 
 # --------------------------------------------------------------------------
@@ -318,6 +322,42 @@ def update_artwork(artwork_id, title, year):
     conn.close()
 
 
+def sell_original(artwork_id, price, sold_date):
+    """Mark the unique original artwork as sold at `price`."""
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE artworks SET original_sale_price = ?, original_sold_date = ? "
+            "WHERE id = ?", (price, sold_date, artwork_id),
+        )
+    conn.close()
+
+
+def cancel_original_sale(artwork_id):
+    """Undo the original sale (e.g. after a misclick)."""
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE artworks SET original_sale_price = NULL, "
+            "original_sold_date = NULL WHERE id = ?", (artwork_id,),
+        )
+    conn.close()
+
+
+def original_sales_list(start=None, end=None):
+    """Sold original artworks (title, date, price), newest first."""
+    frag, params = _date_filter("original_sold_date", start, end)
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT title, original_sold_date AS sold_date, "
+        "original_sale_price AS price FROM artworks "
+        "WHERE original_sale_price IS NOT NULL" + frag +
+        " ORDER BY original_sold_date DESC, title", params,
+    ).fetchall()
+    conn.close()
+    return rows
+
+
 def delete_artwork(artwork_id):
     """Delete an artwork and everything under it (editions, copies cascade).
 
@@ -388,40 +428,58 @@ def _date_filter(column, start, end):
 
 
 def sales_totals(start=None, end=None):
-    """Overall sold count and total revenue (optionally within a date range)."""
-    frag, params = _date_filter("sold_date", start, end)
+    """Combined totals: copies sold + originals sold, with total revenue."""
+    cf, cp = _date_filter("sold_date", start, end)
+    of, op = _date_filter("original_sold_date", start, end)
     conn = get_connection()
-    row = conn.execute(
+    crow = conn.execute(
         "SELECT COUNT(*) AS sold, COALESCE(SUM(sale_price), 0) AS revenue "
-        "FROM copies WHERE status = 'sold'" + frag, params
-    ).fetchone()
+        "FROM copies WHERE status = 'sold'" + cf, cp).fetchone()
+    orow = conn.execute(
+        "SELECT COUNT(*) AS sold, COALESCE(SUM(original_sale_price), 0) AS revenue "
+        "FROM artworks WHERE original_sale_price IS NOT NULL" + of, op).fetchone()
     conn.close()
-    return row
+    return {
+        "sold": crow["sold"],
+        "originals_sold": orow["sold"],
+        "originals_revenue": orow["revenue"],
+        "revenue": crow["revenue"] + orow["revenue"],
+    }
 
 
 def revenue_by_channel(start=None, end=None):
-    """Sold count and revenue grouped by sales channel."""
-    frag, params = _date_filter("sold_date", start, end)
+    """Revenue grouped by channel; original sales appear as 'Œuvre originale'."""
+    cf, cp = _date_filter("sold_date", start, end)
+    of, op = _date_filter("original_sold_date", start, end)
     conn = get_connection()
     rows = conn.execute(
-        "SELECT COALESCE(NULLIF(TRIM(channel), ''), 'Non précisé') AS channel, "
-        "COUNT(*) AS sold, COALESCE(SUM(sale_price), 0) AS revenue "
-        "FROM copies WHERE status = 'sold'" + frag +
-        " GROUP BY channel ORDER BY revenue DESC", params
+        "SELECT channel, COUNT(*) AS sold, COALESCE(SUM(amount), 0) AS revenue FROM ("
+        "  SELECT COALESCE(NULLIF(TRIM(channel), ''), 'Non précisé') AS channel, "
+        "         sale_price AS amount "
+        "  FROM copies WHERE status = 'sold'" + cf +
+        "  UNION ALL "
+        "  SELECT 'Œuvre originale' AS channel, original_sale_price AS amount "
+        "  FROM artworks WHERE original_sale_price IS NOT NULL" + of +
+        ") GROUP BY channel ORDER BY revenue DESC", cp + op
     ).fetchall()
     conn.close()
     return rows
 
 
 def revenue_by_month(start=None, end=None):
-    """Sold count and revenue grouped by month (YYYY-MM), newest first."""
-    frag, params = _date_filter("sold_date", start, end)
+    """Revenue per month (YYYY-MM), copies + originals combined, newest first."""
+    cf, cp = _date_filter("sold_date", start, end)
+    of, op = _date_filter("original_sold_date", start, end)
     conn = get_connection()
     rows = conn.execute(
-        "SELECT substr(sold_date, 1, 7) AS month, COUNT(*) AS sold, "
-        "COALESCE(SUM(sale_price), 0) AS revenue FROM copies "
-        "WHERE status = 'sold' AND sold_date IS NOT NULL" + frag +
-        " GROUP BY month ORDER BY month DESC", params
+        "SELECT month, COUNT(*) AS sold, COALESCE(SUM(amount), 0) AS revenue FROM ("
+        "  SELECT substr(sold_date, 1, 7) AS month, sale_price AS amount "
+        "  FROM copies WHERE status = 'sold' AND sold_date IS NOT NULL" + cf +
+        "  UNION ALL "
+        "  SELECT substr(original_sold_date, 1, 7) AS month, original_sale_price AS amount "
+        "  FROM artworks WHERE original_sale_price IS NOT NULL "
+        "    AND original_sold_date IS NOT NULL" + of +
+        ") GROUP BY month ORDER BY month DESC", cp + op
     ).fetchall()
     conn.close()
     return rows
@@ -453,8 +511,13 @@ def profit_by_artwork(start=None, end=None):
     """
     rev_frag, rev_params = _date_filter("c.sold_date", start, end)
     cost_frag, cost_params = _date_filter("pr.date", start, end)
+    orig_frag, orig_params = _date_filter("original_sold_date", start, end)
     conn = get_connection()
     arts = conn.execute("SELECT id, title FROM artworks ORDER BY title").fetchall()
+
+    originals = {r["id"]: r["original_sale_price"] for r in conn.execute(
+        "SELECT id, original_sale_price FROM artworks "
+        "WHERE original_sale_price IS NOT NULL" + orig_frag, orig_params).fetchall()}
 
     revenue = {r["artwork_id"]: r for r in conn.execute(
         "SELECT v.artwork_id AS artwork_id, COUNT(*) AS sold, "
@@ -479,7 +542,7 @@ def profit_by_artwork(start=None, end=None):
     result = []
     for a in arts:
         r = revenue.get(a["id"])
-        rev = r["revenue"] if r else 0
+        rev = (r["revenue"] if r else 0) + (originals.get(a["id"], 0) or 0)
         sold = r["sold"] if r else 0
         pc = cost.get(a["id"], 0) or 0
         result.append({
@@ -1179,11 +1242,16 @@ def dashboard_summary():
            WHERE status = 'sold'
              AND substr(sold_date, 1, 7) = strftime('%Y-%m', 'now', 'localtime')"""
     ).fetchone()
+    orig_month = conn.execute(
+        """SELECT COALESCE(SUM(original_sale_price), 0) AS r FROM artworks
+           WHERE original_sale_price IS NOT NULL
+             AND substr(original_sold_date, 1, 7) = strftime('%Y-%m', 'now', 'localtime')"""
+    ).fetchone()["r"]
     conn.close()
     return {
         "artworks": artworks, "variants": variants, "in_stock": in_stock,
         "en_exposition": en_exposition, "stock_value": stock_value,
-        "month_sold": month["c"], "month_revenue": month["r"],
+        "month_sold": month["c"], "month_revenue": month["r"] + orig_month,
     }
 
 
