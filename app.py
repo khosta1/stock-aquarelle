@@ -947,13 +947,99 @@ def print_run_page():
             return redirect(url_for("print_history"))
         return redirect(url_for("print_run_page"))
 
+    plan = database.get_pending_plan()
     return render_template(
         "print_run.html",
         groups=database.list_artworks_with_variants(),
         today=date.today().isoformat(),
         low_stock=database.low_stock_variants(LOW_STOCK_THRESHOLD),
         low_threshold=LOW_STOCK_THRESHOLD,
+        plan=plan,
+        plan_text=_printer_text(plan),
     )
+
+
+def _printer_text(plan):
+    """Build a copy-paste message for the printer from the pending plan."""
+    if not plan or not plan["lines"]:
+        return ""
+    lines = ["Bonjour, je souhaite imprimer :"]
+    for it in plan["lines"]:
+        size = it["dimensions"] or it["size"]
+        paper = f", papier {it['paper']}" if it["paper"] else ""
+        lines.append(f"- {it['artwork']} — {size}{paper} : {it['quantity']} ex.")
+    lines.append(f"Total : {plan['total']} exemplaire(s). Merci !")
+    return "\n".join(lines)
+
+
+def _qty_items(form):
+    """Parse qty_<variant_id> fields into a [(variant_id, quantity)] list."""
+    items = []
+    for key, value in form.items():
+        if key.startswith("qty_") and value.strip():
+            try:
+                vid, qty = int(key[4:]), int(value)
+            except ValueError:
+                continue
+            if qty > 0:
+                items.append((vid, qty))
+    return items
+
+
+@app.route("/impression/plan/ajouter", methods=["POST"])
+def add_to_plan():
+    items = _qty_items(request.form)
+    if not items:
+        flash("Indiquez une quantité à ajouter au plan.", "error")
+        return redirect(url_for("print_run_page"))
+    for vid, qty in items:
+        database.add_to_plan(vid, qty)
+    flash(f"{len(items)} édition(s) ajoutée(s) au plan.", "success")
+    return redirect(url_for("print_run_page") + "#plan")
+
+
+@app.route("/impression/plan/item/<int:item_id>", methods=["POST"])
+def update_plan_item(item_id):
+    try:
+        qty = int(request.form.get("quantity", "0"))
+    except ValueError:
+        qty = 0
+    database.update_plan_item(item_id, qty)
+    flash("Plan mis à jour.", "success")
+    return redirect(url_for("print_run_page") + "#plan")
+
+
+@app.route("/impression/plan/item/<int:item_id>/supprimer", methods=["POST"])
+def remove_plan_item(item_id):
+    database.remove_plan_item(item_id)
+    flash("Édition retirée du plan.", "success")
+    return redirect(url_for("print_run_page") + "#plan")
+
+
+@app.route("/impression/plan/vider", methods=["POST"])
+def clear_plan():
+    database.clear_plan()
+    flash("Plan vidé.", "success")
+    return redirect(url_for("print_run_page"))
+
+
+@app.route("/impression/plan/valider", methods=["POST"])
+def finalize_plan():
+    run_date = request.form.get("date", "").strip() or date.today().isoformat()
+    cost_raw = request.form.get("cost", "").strip()
+    try:
+        cost = float(cost_raw) if cost_raw else 0.0
+    except ValueError:
+        flash("Le coût doit être un nombre.", "error")
+        return redirect(url_for("print_run_page") + "#plan")
+    printed, errors = database.finalize_plan(cost, run_date)
+    for e in errors:
+        flash(e, "error")
+    if printed:
+        total = sum(p["quantity"] for p in printed)
+        flash(f"Impression validée : {total} exemplaire(s) créé(s).", "success")
+        return redirect(url_for("print_history"))
+    return redirect(url_for("print_run_page") + "#plan")
 
 
 @app.route("/impressions")

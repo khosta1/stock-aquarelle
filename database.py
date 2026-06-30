@@ -51,6 +51,9 @@ def _migrate(conn):
     if art_cols and "original_sale_price" not in art_cols:
         conn.execute("ALTER TABLE artworks ADD COLUMN original_sale_price REAL")
         conn.execute("ALTER TABLE artworks ADD COLUMN original_sold_date TEXT")
+    run_cols = [r["name"] for r in conn.execute("PRAGMA table_info(print_runs)")]
+    if run_cols and "status" not in run_cols:
+        conn.execute("ALTER TABLE print_runs ADD COLUMN status TEXT NOT NULL DEFAULT 'done'")
 
 
 # --------------------------------------------------------------------------
@@ -1068,7 +1071,7 @@ def list_print_runs():
     """All print sessions, newest first, each with its itemised breakdown."""
     conn = get_connection()
     runs = conn.execute(
-        "SELECT * FROM print_runs ORDER BY date DESC, id DESC"
+        "SELECT * FROM print_runs WHERE status = 'done' ORDER BY date DESC, id DESC"
     ).fetchall()
     result = []
     for run in runs:
@@ -1095,11 +1098,158 @@ def print_costs_total(start=None, end=None):
     frag, params = _date_filter("date", start, end)
     conn = get_connection()
     row = conn.execute(
-        "SELECT COALESCE(SUM(cost), 0) AS total FROM print_runs WHERE 1=1" + frag,
+        "SELECT COALESCE(SUM(cost), 0) AS total FROM print_runs "
+        "WHERE status = 'done'" + frag,
         params
     ).fetchone()
     conn.close()
     return row["total"]
+
+
+# --------------------------------------------------------------------------
+# Print plan (waitlist) — a single pending print_run built up before printing
+# --------------------------------------------------------------------------
+
+def get_pending_plan():
+    """The current pending plan with its items (artwork/format/paper/dimensions),
+    or None. Items carry the thumbnail + dimensions for the visual + text export."""
+    conn = get_connection()
+    run = conn.execute(
+        "SELECT * FROM print_runs WHERE status = 'pending' LIMIT 1"
+    ).fetchone()
+    if run is None:
+        conn.close()
+        return None
+    items = conn.execute(
+        """SELECT pri.id AS item_id, pri.quantity, pri.variant_id,
+                  a.title AS artwork, a.image_path,
+                  v.size, v.paper, f.dimensions
+           FROM print_run_items pri
+           JOIN variants v ON v.id = pri.variant_id
+           JOIN artworks a ON a.id = v.artwork_id
+           LEFT JOIN formats f ON f.name = v.size
+           WHERE pri.print_run_id = ?
+           ORDER BY a.title, v.size""", (run["id"],)
+    ).fetchall()
+    conn.close()
+    return {"run": run, "lines": items,
+            "total": sum(it["quantity"] for it in items)}
+
+
+def add_to_plan(variant_id, quantity):
+    """Add an edition to the (single) pending plan, cumulating its quantity."""
+    if quantity < 1:
+        return
+    conn = get_connection()
+    with conn:
+        run = conn.execute(
+            "SELECT id FROM print_runs WHERE status = 'pending' LIMIT 1"
+        ).fetchone()
+        if run is None:
+            cur = conn.execute(
+                "INSERT INTO print_runs (date, cost, note, status) "
+                "VALUES (NULL, 0, NULL, 'pending')")
+            run_id = cur.lastrowid
+        else:
+            run_id = run["id"]
+        existing = conn.execute(
+            "SELECT id, quantity FROM print_run_items "
+            "WHERE print_run_id = ? AND variant_id = ?", (run_id, variant_id)
+        ).fetchone()
+        if existing:
+            conn.execute("UPDATE print_run_items SET quantity = ? WHERE id = ?",
+                         (existing["quantity"] + quantity, existing["id"]))
+        else:
+            conn.execute(
+                "INSERT INTO print_run_items (print_run_id, variant_id, quantity) "
+                "VALUES (?, ?, ?)", (run_id, variant_id, quantity))
+    conn.close()
+
+
+def update_plan_item(item_id, quantity):
+    """Set an item's quantity (remove it if quantity < 1)."""
+    conn = get_connection()
+    with conn:
+        if quantity < 1:
+            conn.execute("DELETE FROM print_run_items WHERE id = ?", (item_id,))
+        else:
+            conn.execute("UPDATE print_run_items SET quantity = ? WHERE id = ?",
+                         (quantity, item_id))
+    conn.close()
+
+
+def remove_plan_item(item_id):
+    conn = get_connection()
+    with conn:
+        conn.execute("DELETE FROM print_run_items WHERE id = ?", (item_id,))
+    conn.close()
+
+
+def clear_plan():
+    """Delete the whole pending plan."""
+    conn = get_connection()
+    with conn:
+        conn.execute("DELETE FROM print_runs WHERE status = 'pending'")
+    conn.close()
+
+
+def finalize_plan(cost, run_date):
+    """Turn the pending plan into a real print run: create the numbered copies,
+    record the cost. Returns (printed, errors). Quantities exceeding an edition's
+    remaining slots are reduced (with a message)."""
+    conn = get_connection()
+    run = conn.execute(
+        "SELECT id FROM print_runs WHERE status = 'pending' LIMIT 1"
+    ).fetchone()
+    if run is None:
+        conn.close()
+        return None, ["Aucun plan à valider."]
+    run_id = run["id"]
+    items = conn.execute(
+        "SELECT id AS item_id, variant_id, quantity FROM print_run_items "
+        "WHERE print_run_id = ?", (run_id,)
+    ).fetchall()
+    if not items:
+        conn.close()
+        return None, ["Le plan est vide."]
+
+    printed, errors = [], []
+    with conn:
+        for it in items:
+            variant = conn.execute(
+                """SELECT v.edition_size, a.title, v.size
+                   FROM variants v JOIN artworks a ON a.id = v.artwork_id
+                   WHERE v.id = ?""", (it["variant_id"],)).fetchone()
+            agg = conn.execute(
+                "SELECT COUNT(*) AS printed, COALESCE(MAX(edition_number), 0) AS last "
+                "FROM copies WHERE variant_id = ?", (it["variant_id"],)).fetchone()
+            remaining = variant["edition_size"] - agg["printed"]
+            label = f"{variant['title']} — {variant['size']}"
+            qty = min(it["quantity"], max(remaining, 0))
+            if qty < it["quantity"]:
+                errors.append(f"{label} : {remaining} emplacement(s) restant(s), "
+                              f"{it['quantity']} prévu(s) → {qty} imprimé(s).")
+            if qty <= 0:
+                conn.execute("DELETE FROM print_run_items WHERE id = ?", (it["item_id"],))
+                continue
+            first, last = agg["last"] + 1, agg["last"] + qty
+            for number in range(first, last + 1):
+                conn.execute(
+                    "INSERT INTO copies (variant_id, edition_number, status, printed_date) "
+                    "VALUES (?, ?, 'printed', ?)", (it["variant_id"], number, run_date))
+            conn.execute(
+                "UPDATE print_run_items SET quantity = ?, first_number = ?, "
+                "last_number = ? WHERE id = ?", (qty, first, last, it["item_id"]))
+            printed.append({"label": label, "quantity": qty})
+
+        if printed:
+            conn.execute(
+                "UPDATE print_runs SET status = 'done', cost = ?, date = ? WHERE id = ?",
+                (cost, run_date, run_id))
+        else:
+            conn.execute("DELETE FROM print_runs WHERE id = ?", (run_id,))
+    conn.close()
+    return (printed or None), errors
 
 
 # --------------------------------------------------------------------------

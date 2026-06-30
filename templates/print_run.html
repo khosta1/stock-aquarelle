@@ -2,24 +2,85 @@
 {% block title %}Impression — Stock Aquarelle{% endblock %}
 {% block content %}
   <div class="page-head">
-    <h1>Nouvelle impression</h1>
+    <h1>Impression</h1>
     <a class="btn btn-ghost" href="{{ url_for('print_history') }}">Historique des impressions</a>
   </div>
   <p class="muted">
-    Indiquez la quantité imprimée pour chaque édition concernée, puis le coût
-    total payé en bas. Les exemplaires sont numérotés automatiquement à la suite.
+    Construis un <strong>plan</strong> à envoyer à l'imprimeur (ci-dessous), ou
+    fais une <strong>impression directe</strong> en bas. Les exemplaires ne sont
+    créés qu'à l'<em>impression directe</em> ou à la <em>validation du plan</em>.
   </p>
 
+  {# ---------- Plan d'impression en attente ---------- #}
+  <section class="card" id="plan">
+    <h2>📋 Plan d'impression en attente</h2>
+    {% if not plan or not plan.lines %}
+      <p class="muted">
+        Aucun plan en cours. Ajoute des éditions depuis « À réimprimer » ci-dessous,
+        ou via « Ajouter au plan » dans l'impression directe.
+      </p>
+    {% else %}
+      <div class="plan-grid">
+        {% for it in plan.lines %}
+          <div class="plan-item">
+            {% if it.image_path %}
+              <img class="thumb" alt=""
+                   src="{{ url_for('static', filename='images/' + it.image_path) }}">
+            {% else %}
+              <span class="thumb thumb-empty">🖼️</span>
+            {% endif %}
+            <div class="plan-item-body">
+              <div class="plan-item-name">{{ it.artwork }}</div>
+              <div class="muted">{{ it.size }}{% if it.dimensions %} ({{ it.dimensions }}){% endif %}{% if it.paper %} · {{ it.paper }}{% endif %}</div>
+              <form method="post" class="plan-qty"
+                    action="{{ url_for('update_plan_item', item_id=it.item_id) }}">
+                <input type="number" name="quantity" min="1" value="{{ it.quantity }}" class="qty-input">
+                <span class="muted">ex.</span>
+                <button type="submit" class="btn btn-small">OK</button>
+              </form>
+            </div>
+            <form method="post"
+                  action="{{ url_for('remove_plan_item', item_id=it.item_id) }}">
+              <button type="submit" class="btn btn-small btn-ghost" title="Retirer du plan">✕</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+
+      <h3>Texte pour l'imprimeur</h3>
+      <textarea id="plan-text" class="plan-text" readonly
+                rows="{{ plan.lines | length + 3 }}">{{ plan_text }}</textarea>
+      <div class="form-actions" style="margin-top: 0.5rem;">
+        <button type="button" class="btn btn-small" onclick="
+          navigator.clipboard.writeText(document.getElementById('plan-text').value);
+          this.textContent = 'Copié ✓';">Copier le texte</button>
+      </div>
+
+      <h3 style="margin-top: 1.25rem;">Valider l'impression</h3>
+      <p class="muted">Une fois les tirages reçus, indique le prix payé pour créer
+        les exemplaires et enregistrer le coût.</p>
+      <form method="post" action="{{ url_for('finalize_plan') }}" class="form-inline">
+        <label>Date <input type="date" name="date" value="{{ today }}"></label>
+        <label>Prix payé <input type="number" name="cost" step="0.01" min="0" placeholder="ex. 80.00"></label>
+        <button type="submit" class="btn">Valider l'impression ({{ plan.total }} ex.)</button>
+      </form>
+      <form method="post" action="{{ url_for('clear_plan') }}" style="margin-top: 0.6rem;"
+            onsubmit="return confirm('Vider tout le plan en attente ?');">
+        <button type="submit" class="btn btn-small btn-ghost">Vider le plan</button>
+      </form>
+    {% endif %}
+  </section>
+
+  {# ---------- À réimprimer ---------- #}
   {% if low_stock %}
     <section class="card" id="a-reimprimer">
       <h2>⚠ À réimprimer</h2>
-      <p class="muted">
-        Éditions avec {{ low_threshold }} exemplaire(s) en stock ou moins, encore
-        imprimables.
-      </p>
+      <p class="muted">Éditions à {{ low_threshold }} exemplaire(s) en stock ou
+        moins — ajoute-les au plan.</p>
       <table class="stock">
         <thead>
-          <tr><th>Œuvre</th><th>Format</th><th>En stock</th><th>Édition restante</th></tr>
+          <tr><th>Œuvre</th><th>Format</th><th>En stock</th>
+              <th>Édition restante</th><th>Ajouter au plan</th></tr>
         </thead>
         <tbody>
           {% for v in low_stock %}
@@ -28,6 +89,14 @@
               <td>{{ v.size }}{% if v.paper %} · {{ v.paper }}{% endif %}</td>
               <td><strong>{{ v.in_stock }}</strong></td>
               <td>{{ v.remaining }} / {{ v.edition_size }}</td>
+              <td>
+                <form method="post" action="{{ url_for('add_to_plan') }}"
+                      class="form-inline" style="gap: 0.3rem">
+                  <input type="number" name="qty_{{ v.id }}" min="1"
+                         max="{{ v.remaining }}" value="1" class="qty-input">
+                  <button type="submit" class="btn btn-small">+ plan</button>
+                </form>
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -35,8 +104,10 @@
     </section>
   {% endif %}
 
+  {# ---------- Impression directe / ajout au plan en masse ---------- #}
   {% set ns = namespace(has_any=false) %}
-  <form method="post">
+  <form method="post" action="{{ url_for('print_run_page') }}">
+    <h2 style="margin: 1.5rem 0 0.5rem;">Impression directe</h2>
     {% for group in groups %}
       {% if group.variants %}
         {% set ns.has_any = true %}
@@ -45,7 +116,7 @@
           <table class="stock">
             <thead>
               <tr><th>Format</th><th>Imprimés</th><th>Édition restante</th>
-                  <th>Quantité imprimée</th></tr>
+                  <th>Quantité</th></tr>
             </thead>
             <tbody>
               {% for v in group.variants %}
@@ -70,11 +141,9 @@
     {% endfor %}
 
     {% if not ns.has_any %}
-      <p class="muted">Aucune édition à imprimer. Créez d'abord une œuvre et au
-        moins une édition.</p>
+      <p class="muted">Aucune édition. Crée d'abord une œuvre et au moins une édition.</p>
     {% else %}
       <section class="card">
-        <h2>Détails de la session</h2>
         <div class="form-inline">
           <label>Date
             <input type="date" name="date" value="{{ today }}">
@@ -87,7 +156,9 @@
           </label>
         </div>
         <div class="form-actions" style="margin-top: 1rem;">
-          <button type="submit" class="btn">Enregistrer l'impression</button>
+          <button type="submit" class="btn">Imprimer directement</button>
+          <button type="submit" class="btn btn-ghost"
+                  formaction="{{ url_for('add_to_plan') }}">Ajouter au plan</button>
         </div>
       </section>
     {% endif %}

@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS print_runs (
     date       TEXT,
     cost       REAL NOT NULL DEFAULT 0,
     note       TEXT,
+    -- 'done' = printed (copies created, cost set) ; 'pending' = planned waitlist
+    status     TEXT NOT NULL DEFAULT 'done',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
